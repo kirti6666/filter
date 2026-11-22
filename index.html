@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v18</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v19</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -256,9 +256,9 @@ void main(){
     res = mix(res, clamp(gr,0.,1.), uGrade);
   }
   if (uRosy > .001){
-    // skin-tone correction: pull skin toward the reference rosy-peach (G/R 0.73, B/R 0.59),
+    // skin-tone correction: pull skin toward the Hot Days peach measured from Snapchat (G/R 0.76, B/R 0.61),
     // so it looks the same under yellow evening light or cool daylight
-    vec3 target = vec3(res.r, res.r*0.73, res.r*0.59);
+    vec3 target = vec3(res.r, res.r*0.76, res.r*0.61);
     res = mix(res, target, clamp(uRosy*face*0.6, 0., 1.));
   }
   vec4 m = texture(uMakeup, vUV);
@@ -489,6 +489,11 @@ function drawMasks(){
     // "sun-kissed" blush: one soft band under the eyes, across the upper cheeks and over the
     // lower nose / nose tip (shape measured from the Snapchat reference), edges fully diffused
     soft(mctx, fw*0.055, hexA(S.blushColor, S.blush*0.42), ()=> path(mctx, BLUSH_BAND, s));
+    // rosier nose tip (measured: tip clearly redder than the bridge)
+    { const n = lerp(P(1), P(4), 0.5), r = dist(P(129),P(358))*s*0.75;
+      const g = mctx.createRadialGradient(n[0]*s,n[1]*s,0,n[0]*s,n[1]*s,r);
+      g.addColorStop(0, hexA(S.blushColor, S.blush*0.38)); g.addColorStop(0.55, hexA(S.blushColor, S.blush*0.15)); g.addColorStop(1, hexA(S.blushColor, 0));
+      mctx.fillStyle = g; mctx.fillRect(n[0]*s-r, n[1]*s-r, r*2, r*2); }
     // a little fuller on the cheek apples
     for (const [u, ap] of [[118,205],[347,425]]){
       const c = lerp(P(u), P(ap), 0.5), r = fw*0.14;
