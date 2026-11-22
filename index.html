@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v26</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v27</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -111,7 +111,7 @@ const PARAMS = [
   {g:'Makeup',  k:'brows',    l:'Brows',     d:0.15, c:'browColor',   cd:'#3b2a20'},
 ];
 const PRESETS = {
-  'Hot Days': {match:1,smooth:0.68,soften:0.1,brighten:0.25,vibe:1,rosy:0.75,even:0,clarity:0.6,denoise:0.8,grade:1,glow:0.15,slim:0.08,vshape:0.05,eyes:0.08,nose:0.05,lips:0.35,blush:0.45,shadow:0.05,liner:0,brows:0.05, lipColor:'#d9838f', blushColor:'#f3917f', shadowColor:'#d9967a'},
+  'Hot Days': {match:1,smooth:0.68,soften:0.1,brighten:0.32,vibe:1,rosy:0.75,even:0,clarity:0.6,denoise:0.8,grade:1,glow:0.2,slim:0.3,vshape:0.25,eyes:0.12,nose:0.05,lips:0.35,blush:0.45,shadow:0.05,liner:0,brows:0.05, lipColor:'#d9838f', blushColor:'#f3917f', shadowColor:'#d9967a'},
   'Off':      {vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
@@ -224,7 +224,7 @@ void main(){
   res = mix(res, sum/ws, uDenoise * (1. - face) * (1. - feat));       // clean, grain-free background (edge-preserving)
   // soft focus over the WHOLE frame, so the smoothed face doesn't stand out against sharp hair/background
   res = mix(res, mix(res, (c*0.2 + box*0.4 + box2*0.4), 0.9), uSoft*(1. - feat));
-  float b = uBright * (0.3 + 0.7*sk);                 // radiant skin (by skin colour: face+neck+ears together, no patch)
+  float b = uBright * (0.3 + 0.7*face);               // radiant skin (same skin area as every other skin effect)
   if (b > .001){ float beta = 1. + b*4.; res = log(clamp(res,0.,1.)*(beta-1.)+1.)/log(beta); }
   if (uEven > .001 && uHasFace > .5){
     // flatten face shading: pull each pixel toward the average skin brightness around it
@@ -265,7 +265,7 @@ void main(){
     // skin-tone correction: pull skin toward the Hot Days peach measured from Snapchat (G/R 0.76, B/R 0.61),
     // so it looks the same under yellow evening light or cool daylight
     vec3 target = vec3(res.r, res.r*0.74, res.r*0.61);
-    res = mix(res, target, clamp(uRosy*sk*0.6, 0., 1.));
+    res = mix(res, target, clamp(uRosy*face*0.6, 0., 1.));
   }
   vec4 m = texture(uMakeup, vUV);
   if (m.a > .002){
@@ -286,8 +286,8 @@ void main(){
   if (uVibe > .001){
     // healthy, warm skin (Snapchat skin is more saturated and less blue): vibrance + slight warmth on skin only
     vec3 q = clamp(res,0.,1.); float l = dot(q, vec3(.299,.587,.114));
-    q = mix(vec3(l), q, 1. + .22*face*uVibe);
-    q.b *= 1. - .05*face*uVibe;
+    q = mix(vec3(l), q, 1. + .10*face*uVibe);
+    q.b *= 1. - .02*face*uVibe;
     res = q;
   }
   o = vec4(clamp(res,0.,1.), 1.);
@@ -489,7 +489,7 @@ function drawMasks(){
   soft(fctx, fw*0.06, '#fff', ()=> pathPts(fctx, outline, s));
   fctx.globalCompositeOperation='destination-out';
   soft(fctx, fw*0.012, 'rgba(0,0,0,1)', ()=>{ path(fctx,EYE_R,s); path(fctx,EYE_L,s); path(fctx,BROW_R,s); path(fctx,BROW_L,s); });
-  soft(fctx, fw*0.008, 'rgba(0,0,0,.85)', ()=> path(fctx,LIPS_OUT,s));
+  soft(fctx, fw*0.006, 'rgba(0,0,0,.4)', ()=> path(fctx,LIPS_OUT,s));
   fctx.globalCompositeOperation='source-over';
 
   // --- feature mask (eyes, brows, lips): these stay crisp
@@ -536,7 +536,7 @@ function drawMasks(){
   }
   lctx.setTransform(1,0,0,1,0,0); lctx.clearRect(0,0,lipCv.width,lipCv.height);
   const sl = lipCv.width / W, fwl = dist(P(234),P(454))*sl;
-  if (S.lips>0) soft(lctx, fwl*0.006, hexA(S.lipColor, 0.25+S.lips*0.7), ()=>{ path(lctx,LIPS_OUT,sl); path(lctx,LIPS_IN,sl); }, 'fill', 'evenodd');
+  if (S.lips>0) soft(lctx, fwl*0.01, hexA(S.lipColor, 0.25+S.lips*0.7), ()=>{ path(lctx,LIPS_OUT,sl); path(lctx,LIPS_IN,sl); }, 'fill', 'evenodd');
 }
 
 const warpArr = new Float32Array(48), warpR = new Float32Array(12);
