@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v37</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v38</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -115,8 +115,7 @@ const PARAMS = [
   {g:'Makeup',  k:'brows',    l:'Brows',     d:0.15, c:'browColor',   cd:'#3b2a20'},
 ];
 const PRESETS = {
-  'Hot Days': {match:1,smooth:0.68,soften:0,brighten:0.44,vibe:1,rosy:0.75,even:0,clarity:0.25,denoise:0.35,sharp:0.6,grade:1,glow:0.2,slim:0,vshape:0,eyes:0,nose:0,lips:0.22,blush:0.45,shadow:0.05,liner:0,brows:0, lipColor:'#e88a9a', blushColor:'#f3917f', shadowColor:'#d9967a'},
-  'Hot Days HD': {hd:1,match:1,smooth:0.68,soften:0,brighten:0.44,vibe:1,rosy:0.75,even:0,clarity:0.25,denoise:0.35,sharp:0.6,grade:1,glow:0.2,slim:0,vshape:0,eyes:0,nose:0,lips:0.22,blush:0.45,shadow:0.05,liner:0,brows:0, lipColor:'#e88a9a', blushColor:'#f3917f', shadowColor:'#d9967a'},
+  'Hot Days': {smooth:0.9,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:1,denoise:1,clarity:0.25,grade:1,match:1,glow:0.17,slim:0,vshape:0.13,eyes:0,nose:0.04,lips:0.23,lipColor:'#e88a9a',lipShade:0.61,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
   'Off':      {lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
@@ -199,6 +198,7 @@ precision highp float;
 in vec2 vUV; out vec4 o;
 uniform sampler2D uSrc, uFace, uMakeup, uLips, uFeat, uSeg;
 uniform float uHasSeg;
+uniform vec2 uOv;   // predicted face movement since the overlays were drawn (keeps lipstick glued while moving)
 uniform highp sampler3D uLut;
 uniform vec2 uRes;
 uniform float uSmooth, uBright, uRosy, uClarity, uHasFace, uGrade, uGlow, uEven, uSoft, uMatch, uDenoise, uVibe, uSharp, uHD, uFaceRad;
@@ -231,8 +231,8 @@ void main(){
   box /= 12.; box2 /= 12.;
   // skin decision from a neighbourhood average (not single pixels): smooth, no patches, no flicker
   float sk = skin(mix(box, box2, .5));
-  float face = uHasFace > .5 ? max(texture(uFace, vUV).a, sk*0.85) : sk*.85;
-  float feat = uHasFace > .5 ? texture(uFeat, vUV).a : 0.;     // eyes + brows + lips
+  float face = uHasFace > .5 ? max(texture(uFace, vUV - uOv).a, sk*0.85) : sk*.85;
+  float feat = uHasFace > .5 ? texture(uFeat, vUV - uOv).a : 0.;     // eyes + brows + lips
   if (uHasSeg > .5) face = smoothstep(.25, .75, texture(uSeg, vUV).r) * (1. - feat);   // exact skin, pixel by pixel
   float sm = clamp(uSmooth*face*1.15, 0., 1.);
   vec3 res = mix(c, sum/ws, sm);
@@ -260,7 +260,7 @@ void main(){
       res *= mix(1., clamp((wl/wsum)/l, .88, 1.18), uEven*face*.5);
     }
   }
-  vec4 lp = texture(uLips, vUV);
+  vec4 lp = texture(uLips, vUV - uOv);
   if (lp.a > .002){
     vec3 base = clamp(res,0.,1.);
     vec3 bl = mix(overlay(base, lp.rgb), base*lp.rgb*1.15, .35);
@@ -288,7 +288,7 @@ void main(){
     vec3 target = vec3(res.r, res.r*0.74, res.r*0.61);
     res = mix(res, target, clamp(uRosy*face*0.6, 0., 1.));
   }
-  vec4 m = texture(uMakeup, vUV);
+  vec4 m = texture(uMakeup, vUV - uOv);
   if (m.a > .002){
     // blush / eyeshadow melt into the skin (soft-light); liner / brows darken
     vec3 base = clamp(res,0.,1.);
@@ -496,7 +496,7 @@ function lipColorNow(){ return mixHex(S.lipColor, LIP_DEEP_PINK, S.lipShade||0);
 function hexA(hex, a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${Math.max(0,Math.min(1,a)).toFixed(3)})`; }
 
 let dxs = null, lastPtsT = 0;
-const OE = { minCut: 1.2, beta: 0.025, dCut: 1.0 };
+const OE = { minCut: 2.5, beta: 0.06, dCut: 1.0 };
 const oeAlpha = (cut, dt)=> 1/(1 + 1/(2*Math.PI*cut*dt));
 function updatePoints(lms, now){
   const n = lms.length;
@@ -641,7 +641,12 @@ function frame(now){
   else lastGood = null;
   const hasFace = !!(lms && lms.length >= 468);
   const fresh = hasFace && lms !== shownLms; shownLms = lms;
+  let ovx = 0, ovy = 0;
   if (hasFace){ if (fresh) updatePoints(lms, now); if (fresh || slidersDirty) drawMasks(); computeWarps(); } else prevPts = null;
+  if (hasFace && !fresh && isVideo && dxs){
+    const dt = Math.min(0.1, (now - lastPtsT)/1000), k = 13*2;           // lip centre velocity (px/s) x time since last detection
+    ovx = Math.max(-0.05, Math.min(0.05, dxs[k]*dt/W)); ovy = Math.max(-0.05, Math.min(0.05, dxs[k+1]*dt/H));
+  }
 
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
   upload(tSrc, src);
@@ -654,7 +659,7 @@ function frame(now){
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,tMake);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D,tLip);
   const u1=P1.u;
-  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uFeat,5); gl.uniform1i(u1.uSeg,6); gl.uniform1f(u1.uHasSeg, (hasSeg && S.skinAI > 0) ? 1 : 0);
+  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uFeat,5); gl.uniform2f(u1.uOv, ovx, ovy); gl.uniform1i(u1.uSeg,6); gl.uniform1f(u1.uHasSeg, (hasSeg && S.skinAI > 0) ? 1 : 0);
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, tSeg); gl.uniform1f(u1.uDenoise,S.denoise); gl.uniform1f(u1.uHD,S.hd); gl.uniform1f(u1.uFaceRad, hasFace ? dist(P(234),P(454))*0.012 : 0); gl.uniform1f(u1.uSharp,S.sharp); gl.uniform1f(u1.uVibe,S.vibe);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, hasFace ? tFeat : tEmpty);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_3D,tLut);
