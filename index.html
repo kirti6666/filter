@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v38</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v39</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -109,6 +109,8 @@ const PARAMS = [
   {g:'Reshape', k:'nose',     l:'Narrow nose', d:0.20},
   {g:'Makeup',  k:'lips',     l:'Lipstick',  d:0.35, c:'lipColor',    cd:'#c2185b'},
   {g:'Makeup',  k:'lipShade', l:'Lip shade (current → deeper pink)', d:0},
+  {g:'Makeup',  k:'lipDetail',l:'Lip texture (crisp lips)', d:0},
+  {g:'Makeup',  k:'noseTip',  l:'Nose tip flush', d:0},
   {g:'Makeup',  k:'blush',    l:'Blush',     d:0.25, c:'blushColor',  cd:'#ff6f91'},
   {g:'Makeup',  k:'shadow',   l:'Eyeshadow', d:0.00, c:'shadowColor', cd:'#9c6b8e'},
   {g:'Makeup',  k:'liner',    l:'Eyeliner',  d:0.00, c:'linerColor',  cd:'#141414'},
@@ -116,7 +118,8 @@ const PARAMS = [
 ];
 const PRESETS = {
   'Hot Days': {smooth:0.9,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:1,denoise:1,clarity:0.25,grade:1,match:1,glow:0.17,slim:0,vshape:0.13,eyes:0,nose:0.04,lips:0.23,lipColor:'#e88a9a',lipShade:0.61,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
-  'Off':      {lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
+  'Hot Days 2': {smooth:0.7,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0.17,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipDetail:1,noseTip:0.6,lipColor:'#b84e60',lipShade:0,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
+  'Off':      {lipDetail:0,noseTip:0,lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
   'Glam':     {smooth:0.7,brighten:0.4,rosy:0.2,clarity:0.35,slim:0.45,vshape:0.35,eyes:0.35,nose:0.3,lips:0.6,blush:0.3,shadow:0.45,liner:0.6,brows:0.35, lipColor:'#a3123a', blushColor:'#e86a7f', shadowColor:'#7a4a6e', linerColor:'#111111', browColor:'#2e2018'},
@@ -547,7 +550,7 @@ function drawMasks(){
   soft(fctx, fw*0.06, '#fff', ()=> pathPts(fctx, outline, s));
   fctx.globalCompositeOperation='destination-out';
   soft(fctx, fw*0.012, 'rgba(0,0,0,1)', ()=>{ path(fctx,EYE_R,s); path(fctx,EYE_L,s); path(fctx,BROW_R,s); path(fctx,BROW_L,s); });
-  soft(fctx, fw*0.006, 'rgba(0,0,0,.4)', ()=> path(fctx,LIPS_OUT,s));
+  soft(fctx, fw*0.006, `rgba(0,0,0,${(0.4 + 0.45*(S.lipDetail||0)).toFixed(2)})`, ()=> path(fctx,LIPS_OUT,s));
   fctx.globalCompositeOperation='source-over';
 
   // --- feature mask (eyes, brows, lips): these stay crisp
@@ -583,6 +586,10 @@ function drawMasks(){
     { const n = lerp(P(1), P(4), 0.5), r = dist(P(129),P(358))*s*0.75;
       const g = mctx.createRadialGradient(n[0]*s,n[1]*s,0,n[0]*s,n[1]*s,r);
       g.addColorStop(0, hexA(S.blushColor, S.blush*0.12)); g.addColorStop(0.55, hexA(S.blushColor, S.blush*0.05)); g.addColorStop(1, hexA(S.blushColor, 0));
+      mctx.fillStyle = g; mctx.fillRect(n[0]*s-r, n[1]*s-r, r*2, r*2); }
+    if (S.noseTip > 0){ const n = lerp(P(1), P(4), 0.5), r = dist(P(129),P(358))*s*0.8, na = 0.4*S.noseTip;
+      const g = mctx.createRadialGradient(n[0]*s,n[1]*s,0,n[0]*s,n[1]*s,r);
+      g.addColorStop(0, hexA('#8c4d52', na)); g.addColorStop(0.55, hexA('#8c4d52', na*0.45)); g.addColorStop(1, hexA('#8c4d52', 0));
       mctx.fillStyle = g; mctx.fillRect(n[0]*s-r, n[1]*s-r, r*2, r*2); }
     // a little fuller on the cheek apples
     for (const [u, ap] of [[118,205],[347,425]]){
