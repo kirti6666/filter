@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v36</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v37</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -108,6 +108,7 @@ const PARAMS = [
   {g:'Reshape', k:'eyes',     l:'Big eyes', d:0.25},
   {g:'Reshape', k:'nose',     l:'Narrow nose', d:0.20},
   {g:'Makeup',  k:'lips',     l:'Lipstick',  d:0.35, c:'lipColor',    cd:'#c2185b'},
+  {g:'Makeup',  k:'lipShade', l:'Lip shade (current → deeper pink)', d:0},
   {g:'Makeup',  k:'blush',    l:'Blush',     d:0.25, c:'blushColor',  cd:'#ff6f91'},
   {g:'Makeup',  k:'shadow',   l:'Eyeshadow', d:0.00, c:'shadowColor', cd:'#9c6b8e'},
   {g:'Makeup',  k:'liner',    l:'Eyeliner',  d:0.00, c:'linerColor',  cd:'#141414'},
@@ -116,7 +117,7 @@ const PARAMS = [
 const PRESETS = {
   'Hot Days': {match:1,smooth:0.68,soften:0,brighten:0.44,vibe:1,rosy:0.75,even:0,clarity:0.25,denoise:0.35,sharp:0.6,grade:1,glow:0.2,slim:0,vshape:0,eyes:0,nose:0,lips:0.22,blush:0.45,shadow:0.05,liner:0,brows:0, lipColor:'#e88a9a', blushColor:'#f3917f', shadowColor:'#d9967a'},
   'Hot Days HD': {hd:1,match:1,smooth:0.68,soften:0,brighten:0.44,vibe:1,rosy:0.75,even:0,clarity:0.25,denoise:0.35,sharp:0.6,grade:1,glow:0.2,slim:0,vshape:0,eyes:0,nose:0,lips:0.22,blush:0.45,shadow:0.05,liner:0,brows:0, lipColor:'#e88a9a', blushColor:'#f3917f', shadowColor:'#d9967a'},
-  'Off':      {skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
+  'Off':      {lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
   'Glam':     {smooth:0.7,brighten:0.4,rosy:0.2,clarity:0.35,slim:0.45,vshape:0.35,eyes:0.35,nose:0.3,lips:0.6,blush:0.3,shadow:0.45,liner:0.6,brows:0.35, lipColor:'#a3123a', blushColor:'#e86a7f', shadowColor:'#7a4a6e', linerColor:'#111111', browColor:'#2e2018'},
@@ -143,6 +144,7 @@ for (const p of PARAMS){
 function syncUI(){ for (const k in inputs){ const {r,v,c,p}=inputs[k]; r.value=Math.round(S[k]*100); v.textContent=r.value; if(c) c.value=S[p.c]; } syncJSON(); }
 function syncJSON(){
   slidersDirty = true;
+  if (inputs.lipShade){ let sw = inputs.lipShade.r.parentElement.querySelector('.sw'); if (!sw){ sw=document.createElement('i'); sw.className='sw'; sw.style.cssText='width:20px;height:20px;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,.3);flex:none'; inputs.lipShade.r.parentElement.querySelector('.lbl').prepend(sw); } try{ sw.style.background = lipColorNow(); sw.title = lipColorNow(); }catch(e){} }
   const out = {}; for (const p of PARAMS){ out[p.k]=+S[p.k].toFixed(2); if(p.c) out[p.c]=S[p.c]; }
   $('json').value = JSON.stringify(out, null, 2);
 }
@@ -487,6 +489,10 @@ const dist = (a,b)=> Math.hypot(a[0]-b[0], a[1]-b[1]);
 const lerp = (a,b,t)=> [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t];
 const centroid = ids => { let x=0,y=0; for(const i of ids){ x+=pts[i*2]; y+=pts[i*2+1]; } return [x/ids.length, y/ids.length]; };
 function shade(hex, k){ const n=parseInt(hex.slice(1),16); const f=v=>Math.max(0,Math.min(255,Math.round(v*k))); return '#'+[n>>16&255,n>>8&255,n&255].map(v=>f(v).toString(16).padStart(2,'0')).join(''); }
+function mixHex(a, b, t){ const p=parseInt(a.slice(1),16), q=parseInt(b.slice(1),16); const m=(x,y)=>Math.round(x+(y-x)*t);
+  return '#'+[m(p>>16&255,q>>16&255),m(p>>8&255,q>>8&255),m(p&255,q&255)].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+const LIP_DEEP_PINK = '#cf6283';   // where the shade slider ends: a slightly deeper, natural rose-pink
+function lipColorNow(){ return mixHex(S.lipColor, LIP_DEEP_PINK, S.lipShade||0); }
 function hexA(hex, a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${Math.max(0,Math.min(1,a)).toFixed(3)})`; }
 
 let dxs = null, lastPtsT = 0;
@@ -588,7 +594,7 @@ function drawMasks(){
   }
   lctx.setTransform(1,0,0,1,0,0); lctx.clearRect(0,0,lipCv.width,lipCv.height);
   const sl = lipCv.width / W, fwl = dist(P(234),P(454))*sl;
-  if (S.lips>0) soft(lctx, fwl*0.01, hexA(S.lipColor, 0.25+S.lips*0.7), ()=>{ path(lctx,LIPS_OUT,sl); path(lctx,LIPS_IN,sl); }, 'fill', 'evenodd');
+  if (S.lips>0) soft(lctx, fwl*0.01, hexA(lipColorNow(), 0.25+S.lips*0.7), ()=>{ path(lctx,LIPS_OUT,sl); path(lctx,LIPS_IN,sl); }, 'fill', 'evenodd');
 }
 
 const warpArr = new Float32Array(48), warpR = new Float32Array(12);
@@ -692,6 +698,7 @@ function drawMeshOverlay(){
   for (let i=0;i<pts.length/2;i++){ const x = mir ? (W-pts[i*2])*sx : pts[i*2]*sx; c.fillRect(x-1, pts[i*2+1]*sy-1, 2, 2); }
 }
 
+syncJSON();   // draw the lip-shade swatch now that everything is defined
 requestAnimationFrame(frame);
 window.__lab = { S, get landmarker(){ return landmarker; }, set landmarker(v){ landmarker=v; } };
 </script>
