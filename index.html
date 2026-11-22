@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v23</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v24</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -94,6 +94,8 @@ const PARAMS = [
   {g:'Beauty',  k:'rosy',     l:'Rosy skin tone', d:0.20},
   {g:'Beauty',  k:'even',     l:'Even skin tone', d:0},
   {g:'Beauty',  k:'soften',   l:'Soft focus (whole frame)', d:0},
+  {g:'Beauty',  k:'define',   l:'Eye & brow depth', d:0},
+  {g:'Beauty',  k:'underEye', l:'Under-eye depth', d:0},
   {g:'Beauty',  k:'denoise',  l:'Clean background', d:0},
   {g:'Beauty',  k:'clarity',  l:'Sharp eyes & brows', d:0.25},
   {g:'Look',    k:'grade',    l:'Hot Days color', d:0},
@@ -110,8 +112,8 @@ const PARAMS = [
   {g:'Makeup',  k:'brows',    l:'Brows',     d:0.15, c:'browColor',   cd:'#3b2a20'},
 ];
 const PRESETS = {
-  'Hot Days': {match:1,smooth:0.68,soften:0.1,brighten:0.45,rosy:0.75,even:0,clarity:0.6,denoise:0.8,grade:1,glow:0.28,slim:0.08,vshape:0.05,eyes:0.08,nose:0.05,lips:0.35,blush:0.45,shadow:0.05,liner:0,brows:0.05, lipColor:'#d9838f', blushColor:'#f78a9b', shadowColor:'#d9967a'},
-  'Off':      {denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
+  'Hot Days': {match:1,smooth:0.6,define:1,underEye:1,soften:0.1,brighten:0.45,rosy:0.75,even:0,clarity:0.6,denoise:0.8,grade:1,glow:0.28,slim:0.08,vshape:0.05,eyes:0.08,nose:0.05,lips:0.35,blush:0.45,shadow:0.05,liner:0,brows:0.05, lipColor:'#d9838f', blushColor:'#f78a9b', shadowColor:'#d9967a'},
+  'Off':      {define:0,underEye:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
   'Glam':     {smooth:0.7,brighten:0.4,rosy:0.2,clarity:0.35,slim:0.45,vshape:0.35,eyes:0.35,nose:0.3,lips:0.6,blush:0.3,shadow:0.45,liner:0.6,brows:0.35, lipColor:'#a3123a', blushColor:'#e86a7f', shadowColor:'#7a4a6e', linerColor:'#111111', browColor:'#2e2018'},
@@ -185,7 +187,7 @@ in vec2 vUV; out vec4 o;
 uniform sampler2D uSrc, uFace, uMakeup, uLips, uFeat;
 uniform highp sampler3D uLut;
 uniform vec2 uRes;
-uniform float uSmooth, uBright, uRosy, uClarity, uHasFace, uGrade, uGlow, uEven, uSoft, uMatch, uDenoise;
+uniform float uSmooth, uBright, uRosy, uClarity, uHasFace, uGrade, uGlow, uEven, uSoft, uMatch, uDenoise, uDefine;
 vec3 overlay(vec3 b, vec3 s){ return mix(2.*b*s, 1.-2.*(1.-b)*(1.-s), step(.5,b)); }
 float skin(vec3 c){
   float cb = 0.5 + (-0.168736*c.r - 0.331264*c.g + 0.5*c.b);
@@ -218,7 +220,7 @@ void main(){
   float feat = uHasFace > .5 ? texture(uFeat, vUV).a : 0.;     // eyes + brows + lips
   float sm = clamp(uSmooth*face*1.15, 0., 1.);
   vec3 res = mix(c, sum/ws, sm);
-  res += (c - box) * 0.16 * sm;                       // keep a little real skin texture
+  res += (c - box) * 0.22 * sm;                       // keep a little real skin texture
   res += ((c - box)*1.2 + (c - box2)*0.6) * uClarity * feat;        // crisp eyes, brows, lips only
   res = mix(res, sum/ws, uDenoise * (1. - face) * (1. - feat));       // clean, grain-free background (edge-preserving)
   // soft focus over the WHOLE frame, so the smoothed face doesn't stand out against sharp hair/background
@@ -281,6 +283,13 @@ void main(){
     vec3 q = clamp(res,0.,1.);
     vec3 sm2 = texture(uLut, q*(16./17.) + 0.5/17.).rgb;
     res = mix(res, clamp(sm2,0.,1.), uMatch);
+  }
+  if (uDefine > .001 && feat > .001){
+    // deep, rich iris and brows (Snapchat: iris ~49/6/6, brows ~81/47/48) — dark pixels in the eye/brow area only
+    vec3 q = clamp(res,0.,1.);
+    float l = dot(q, vec3(.299,.587,.114));
+    float wd = feat * (1. - smoothstep(.25, .5, l)) * uDefine;
+    res = mix(q, pow(q, vec3(1.25))*.95, clamp(wd,0.,1.));
   }
   o = vec4(clamp(res,0.,1.), 1.);
 }`;
@@ -513,10 +522,10 @@ function drawMasks(){
     // "sun-kissed" blush: one soft band under the eyes, across the upper cheeks and over the
     // lower nose / nose tip (shape measured from the Snapchat reference), edges fully diffused
     soft(mctx, fw*0.055, hexA(S.blushColor, S.blush*0.42), ()=> path(mctx, BLUSH_BAND, s));
-    // rosier nose tip (measured: tip clearly redder than the bridge)
-    { const n = lerp(P(1), P(4), 0.5), r = dist(P(129),P(358))*s*0.75;
+    // deeper, redder nose tip (Snapchat ~207/119/98): its own rose-brown tone, not the pink blush
+    { const n = lerp(P(1), P(4), 0.5), r = dist(P(129),P(358))*s*0.8, na = Math.min(1, S.blush/0.45)*0.32;
       const g = mctx.createRadialGradient(n[0]*s,n[1]*s,0,n[0]*s,n[1]*s,r);
-      g.addColorStop(0, hexA(S.blushColor, S.blush*0.12)); g.addColorStop(0.55, hexA(S.blushColor, S.blush*0.05)); g.addColorStop(1, hexA(S.blushColor, 0));
+      g.addColorStop(0, hexA('#8c4d52', na)); g.addColorStop(0.55, hexA('#8c4d52', na*0.45)); g.addColorStop(1, hexA('#8c4d52', 0));
       mctx.fillStyle = g; mctx.fillRect(n[0]*s-r, n[1]*s-r, r*2, r*2); }
     // a little fuller on the cheek apples
     for (const [u, ap] of [[118,205],[347,425]]){
@@ -525,6 +534,13 @@ function drawMasks(){
       g.addColorStop(0, hexA(S.blushColor, S.blush*0.3)); g.addColorStop(0.5, hexA(S.blushColor, S.blush*0.12)); g.addColorStop(1, hexA(S.blushColor, 0));
       mctx.fillStyle = g; mctx.fillRect(c[0]*s-r, c[1]*s-r, r*2, r*2);
     }
+  }
+  if (S.underEye>0){
+    // natural under-eye depth (Snapchat keeps it: ~179/100/79): soft crescent between lower lid and upper cheek
+    const LOW_R=[33,7,163,144,145,153,154,155,133], ROW_R=[143,111,117,118,119,120,121,128,245];
+    const LOW_L=[263,249,390,373,374,380,381,382,362], ROW_L=[372,340,346,347,348,349,350,357,465];
+    for (const [lo, row] of [[LOW_R,ROW_R],[LOW_L,ROW_L]])
+      soft(mctx, fw*0.025, hexA('#6a5258', 0.9*S.underEye), ()=>{ path(mctx, lo, s, false); for (let k=row.length-1;k>=0;k--){ const p=P(row[k]); mctx.lineTo(p[0]*s,p[1]*s); } mctx.closePath(); });
   }
   lctx.setTransform(1,0,0,1,0,0); lctx.clearRect(0,0,lipCv.width,lipCv.height);
   const sl = lipCv.width / W, fwl = dist(P(234),P(454))*sl;
@@ -587,7 +603,7 @@ function frame(now){
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,tMake);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D,tLip);
   const u1=P1.u;
-  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uFeat,5); gl.uniform1f(u1.uDenoise,S.denoise);
+  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uFeat,5); gl.uniform1f(u1.uDenoise,S.denoise); gl.uniform1f(u1.uDefine,S.define);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, hasFace ? tFeat : tEmpty);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_3D,tLut);
   gl.uniform2f(u1.uRes,W,H); gl.uniform1f(u1.uSmooth,S.smooth); gl.uniform1f(u1.uBright,S.brighten);
