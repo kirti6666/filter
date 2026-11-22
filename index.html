@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v41</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v42</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -95,6 +95,7 @@ const PARAMS = [
   {g:'Beauty',  k:'even',     l:'Even skin tone', d:0},
   {g:'Beauty',  k:'soften',   l:'Soft focus (whole frame)', d:0},
   {g:'Beauty',  k:'vibe',     l:'Healthy warm skin', d:0},
+  {g:'Beauty',  k:'lite',     l:'Lite mode (faster phones/Android)', d:0},
   {g:'Beauty',  k:'trackEvery',l:'Precise tracking (every frame)', d:0},
   {g:'Beauty',  k:'skinAI',   l:'AI skin detection (beta, slower)', d:0},
   {g:'Beauty',  k:'hd',       l:'HD detail (face-size aware)', d:0},
@@ -121,7 +122,8 @@ const PRESETS = {
   'Hot Days': {smooth:0.9,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:1,denoise:1,clarity:0.25,grade:1,match:1,glow:0.17,slim:0,vshape:0.13,eyes:0,nose:0.04,lips:0.23,lipColor:'#e88a9a',lipShade:0.61,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
   'Hot Days 2': {smooth:0.7,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0.17,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipDetail:1,noseTip:0.6,lipColor:'#b84e60',lipShade:0,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
   'Hot Days 3': {smooth:0.7,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,trackEvery:1,skinAI:0,hd:1,sharp:1,denoise:1,clarity:0.1,grade:1,match:1,glow:0.17,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipColor:'#b84e60',lipShade:0,lipDetail:1,noseTip:0.35,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
-  'Off':      {trackEvery:0,lipDetail:0,noseTip:0,lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
+  'Hot Days Android': {lite:1,smooth:0.75,brighten:0.48,rosy:0.75,even:0,soften:0,vibe:1,trackEvery:0.5,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipColor:'#b84e60',lipShade:0,lipDetail:1,noseTip:0.35,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
+  'Off':      {lite:0,trackEvery:0,lipDetail:0,noseTip:0,lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
   'Glam':     {smooth:0.7,brighten:0.4,rosy:0.2,clarity:0.35,slim:0.45,vshape:0.35,eyes:0.35,nose:0.3,lips:0.6,blush:0.3,shadow:0.45,liner:0.6,brows:0.35, lipColor:'#a3123a', blushColor:'#e86a7f', shadowColor:'#7a4a6e', linerColor:'#111111', browColor:'#2e2018'},
@@ -207,6 +209,7 @@ uniform vec2 uOv;   // predicted face movement since the overlays were drawn (ke
 uniform highp sampler3D uLut;
 uniform vec2 uRes;
 uniform float uSmooth, uBright, uRosy, uClarity, uHasFace, uGrade, uGlow, uEven, uSoft, uMatch, uDenoise, uVibe, uSharp, uHD, uFaceRad;
+uniform int uRings;   // 3 = full quality, 2 = lite (Android / slower GPUs)
 vec3 overlay(vec3 b, vec3 s){ return mix(2.*b*s, 1.-2.*(1.-b)*(1.-s), step(.5,b)); }
 float skin(vec3 c){
   float cb = 0.5 + (-0.168736*c.r - 0.331264*c.g + 0.5*c.b);
@@ -221,6 +224,7 @@ void main(){
   float sigR = 0.06 + 0.10*uSmooth;
   vec3 sum = c, box = vec3(0.), box2 = vec3(0.); float ws = 1.0;
   for (int ring=1; ring<=3; ring++){
+    if (ring > uRings) break;
     float r = float(ring)*rad;
     float sp = exp(-float(ring*ring)/5.0);
     for (int i=0;i<12;i++){
@@ -638,7 +642,7 @@ function computeWarps(){
 }
 
 // ---------------------------------------------------------------- render loop
-let slowCount=0, lastGood=null, missCount=0, shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
+let lastFps=30, slowCount=0, lastGood=null, missCount=0, shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
 function upload(t, el){ gl.bindTexture(gl.TEXTURE_2D,t); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,el); }
 function frame(now){
   requestAnimationFrame(frame);
@@ -650,7 +654,7 @@ function frame(now){
   if (landmarker){
     frameNo++;
     if (!isVideo && cachedLms) lms = cachedLms;
-    else if (MOBILE && isVideo && lastLms && frameNo % 2 && !(S.trackEvery > 0)){ lms = lastLms; if (frameNo % 6 === 1) runSegmentation(now); }   // phones: skin model ~5x/sec, between face detections
+    else if (MOBILE && isVideo && lastLms && frameNo % 2 && !(S.trackEvery >= 1 || (S.trackEvery > 0 && lastFps > 26))){ lms = lastLms; if (frameNo % 6 === 1) runSegmentation(now); }   // phones: skin model ~5x/sec, between face detections
     else {
       const t0 = performance.now(), ts = Math.max(now, lastTs+1); lastTs = ts;
       try { const r = landmarker.detectForVideo(detInput(), ts); lms = r.faceLandmarks && r.faceLandmarks[0]; } catch(e){ console.warn(e); }
@@ -683,7 +687,7 @@ function frame(now){
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,tMake);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D,tLip);
   const u1=P1.u;
-  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uFeat,5); gl.uniform2f(u1.uOv, ovx, ovy); gl.uniform1i(u1.uSeg,6); gl.uniform1f(u1.uHasSeg, (hasSeg && S.skinAI > 0) ? 1 : 0);
+  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uFeat,5); gl.uniform1i(u1.uRings, S.lite > 0 ? 2 : 3); gl.uniform2f(u1.uOv, ovx, ovy); gl.uniform1i(u1.uSeg,6); gl.uniform1f(u1.uHasSeg, (hasSeg && S.skinAI > 0) ? 1 : 0);
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, tSeg); gl.uniform1f(u1.uDenoise,S.denoise); gl.uniform1f(u1.uHD,S.hd); gl.uniform1f(u1.uFaceRad, hasFace ? dist(P(234),P(454))*0.012 : 0); gl.uniform1f(u1.uSharp,S.sharp); gl.uniform1f(u1.uVibe,S.vibe);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, hasFace ? tFeat : tEmpty);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_3D,tLut);
@@ -711,7 +715,7 @@ function frame(now){
   if (isVideo && now - fpsT > 500 && frames*1000/(now-fpsT) < 22){ slowCount = (slowCount||0) + 1;
     if (slowCount >= 4 && procScale > 0.7){ procScale = Math.max(0.67, procScale - 0.17); slowCount = 0; setSource(video, true); } }
   else if (now - fpsT > 500) slowCount = 0;
-  if (now - fpsT > 500){ $('fps').textContent = `${(frames*1000/(now-fpsT)).toFixed(0)} fps · face ${hasFace?'✓':'—'} · detect ${detMs.toFixed(1)} ms · ${W}×${H}`; frames=0; fpsT=now; }
+  if (now - fpsT > 500){ lastFps = frames*1000/(now-fpsT); $('fps').textContent = `${(frames*1000/(now-fpsT)).toFixed(0)} fps · face ${hasFace?'✓':'—'} · detect ${detMs.toFixed(1)} ms · ${W}×${H}`; frames=0; fpsT=now; }
 }
 
 // landmark overlay (debug)
