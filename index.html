@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v20</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v21</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -90,7 +90,7 @@
 // ---------------------------------------------------------------- params
 const PARAMS = [
   {g:'Beauty',  k:'smooth',   l:'Skin smoothing', d:0.55},
-  {g:'Beauty',  k:'brighten', l:'Whiten face', d:0.30},
+  {g:'Beauty',  k:'brighten', l:'Brighten', d:0.30},
   {g:'Beauty',  k:'rosy',     l:'Rosy skin tone', d:0.20},
   {g:'Beauty',  k:'even',     l:'Even skin tone', d:0},
   {g:'Beauty',  k:'soften',   l:'Soft focus (whole frame)', d:0},
@@ -109,7 +109,7 @@ const PARAMS = [
   {g:'Makeup',  k:'brows',    l:'Brows',     d:0.15, c:'browColor',   cd:'#3b2a20'},
 ];
 const PRESETS = {
-  'Hot Days': {match:1,smooth:0.85,soften:0.22,brighten:0.3,rosy:0.6,even:0.25,clarity:0,grade:1,glow:0.12,slim:0.08,vshape:0.05,eyes:0.08,nose:0.05,lips:0.35,blush:0.45,shadow:0.05,liner:0,brows:0.05, lipColor:'#d9838f', blushColor:'#f78a9b', shadowColor:'#d9967a'},
+  'Hot Days': {match:1,smooth:0.75,soften:0.22,brighten:0.15,rosy:0.5,even:0,clarity:0,grade:1,glow:0.12,slim:0.08,vshape:0.05,eyes:0.08,nose:0.05,lips:0.35,blush:0.45,shadow:0.05,liner:0,brows:0.05, lipColor:'#d9838f', blushColor:'#f78a9b', shadowColor:'#d9967a'},
   'Off':      {match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
@@ -195,7 +195,7 @@ void main(){
   vec3 c = texture(uSrc, vUV).rgb;
   float sk = skin(c);
   // face mask (soft) + skin colour elsewhere (neck, ears) so there is no visible boundary
-  float face = uHasFace > .5 ? max(texture(uFace, vUV).a, sk*0.55) : sk*.8;
+  float face = uHasFace > .5 ? max(texture(uFace, vUV).a, sk*0.85) : sk*.85;
   vec2 px = 1.0/uRes;
   float rad = max(1.0, uRes.y*0.0068);
   float sigR = 0.06 + 0.10*uSmooth;
@@ -220,7 +220,7 @@ void main(){
   res += ((c - box)*1.2 + (c - box2)*0.6) * uClarity * (1. - sm);   // crisp eyes, brows, lips, hair
   // soft focus over the WHOLE frame, so the smoothed face doesn't stand out against sharp hair/background
   res = mix(res, mix(res, (c*0.2 + box*0.4 + box2*0.4), 0.9), uSoft);
-  float b = uBright * face;                           // whiten face + visible skin only (background untouched)
+  float b = uBright;                                  // even brightening of the whole picture (no face patch)
   if (b > .001){ float beta = 1. + b*4.; res = log(clamp(res,0.,1.)*(beta-1.)+1.)/log(beta); }
   if (uEven > .001 && uHasFace > .5){
     // flatten face shading: pull each pixel toward the average skin brightness around it
@@ -261,7 +261,7 @@ void main(){
     // skin-tone correction: pull skin toward the Hot Days peach measured from Snapchat (G/R 0.76, B/R 0.61),
     // so it looks the same under yellow evening light or cool daylight
     vec3 target = vec3(res.r, res.r*0.76, res.r*0.61);
-    res = mix(res, target, clamp(uRosy*face*0.6, 0., 1.));
+    res = mix(res, target, clamp(uRosy*sk*0.6, 0., 1.));
   }
   vec4 m = texture(uMakeup, vUV);
   if (m.a > .002){
