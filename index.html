@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v15</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v16</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -108,7 +108,7 @@ const PARAMS = [
   {g:'Makeup',  k:'brows',    l:'Brows',     d:0.15, c:'browColor',   cd:'#3b2a20'},
 ];
 const PRESETS = {
-  'Hot Days': {smooth:0.7,soften:0,brighten:0.3,rosy:0.6,even:0.25,clarity:0.4,grade:1,glow:0.12,slim:0.08,vshape:0.05,eyes:0.08,nose:0.05,lips:0.55,blush:0.35,shadow:0.05,liner:0,brows:0.05, lipColor:'#a26a9c', blushColor:'#ff8fb1', shadowColor:'#d9967a'},
+  'Hot Days': {smooth:0.7,soften:0,brighten:0.3,rosy:0.6,even:0.25,clarity:0.4,grade:1,glow:0.12,slim:0.08,vshape:0.05,eyes:0.08,nose:0.05,lips:0.55,blush:0.45,shadow:0.05,liner:0,brows:0.05, lipColor:'#a26a9c', blushColor:'#f78a9b', shadowColor:'#d9967a'},
   'Off':      {soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
@@ -399,6 +399,7 @@ const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,3
 const LIPS_OUT=[61,146,91,181,84,17,314,405,321,375,291,409,270,269,267,0,37,39,40,185];
 const UPPER_LIP=[61,185,40,39,37,0,267,269,270,409,291,308,415,310,311,312,13,82,81,80,191,78];
 const LOWER_LIP=[61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,78];
+const BLUSH_BAND=[227,143,111,117,118,119,120,121,128,245,197,465,357,350,349,348,347,346,340,372,447,376,411,425,266,358,2,129,36,205,187,147];
 const LIPS_IN=[78,95,88,178,87,14,317,402,318,324,308,415,310,311,312,13,82,81,80,191];
 const EYE_R=[33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
 const EYE_L=[263,249,390,373,374,380,381,382,362,398,384,385,386,387,388,466];
@@ -485,17 +486,16 @@ function drawMasks(){
     }
   }
   if (S.blush>0){
-    const stops = (g, a)=>{ g.addColorStop(0, hexA(S.blushColor, a)); g.addColorStop(0.35, hexA(S.blushColor, a*0.7)); g.addColorStop(0.7, hexA(S.blushColor, a*0.22)); g.addColorStop(1, hexA(S.blushColor, 0)); };
-    for (const [apple, temple] of [[205,127],[425,356]]){
-      const a = P(apple), t = P(temple), c = lerp(a, t, 0.22);
-      const ang = Math.atan2(t[1]-a[1], t[0]-a[0]), rx = fw*0.19, ry = fw*0.11;
-      mctx.save(); mctx.translate(c[0]*s, c[1]*s); mctx.rotate(ang); mctx.scale(1, ry/rx);
-      const g = mctx.createRadialGradient(0,0,0,0,0,rx); stops(g, S.blush*0.55);
-      mctx.fillStyle = g; mctx.fillRect(-rx,-rx,rx*2,rx*2); mctx.restore();
+    // "sun-kissed" blush: one soft band under the eyes, across the upper cheeks and over the
+    // lower nose / nose tip (shape measured from the Snapchat reference), edges fully diffused
+    soft(mctx, fw*0.055, hexA(S.blushColor, S.blush*0.42), ()=> path(mctx, BLUSH_BAND, s));
+    // a little fuller on the cheek apples
+    for (const [u, ap] of [[118,205],[347,425]]){
+      const c = lerp(P(u), P(ap), 0.5), r = fw*0.14;
+      const g = mctx.createRadialGradient(c[0]*s,c[1]*s,0,c[0]*s,c[1]*s,r);
+      g.addColorStop(0, hexA(S.blushColor, S.blush*0.3)); g.addColorStop(0.5, hexA(S.blushColor, S.blush*0.12)); g.addColorStop(1, hexA(S.blushColor, 0));
+      mctx.fillStyle = g; mctx.fillRect(c[0]*s-r, c[1]*s-r, r*2, r*2);
     }
-    const n = P(1), nr = fw*0.07;
-    const g2 = mctx.createRadialGradient(n[0]*s,n[1]*s,0,n[0]*s,n[1]*s,nr); stops(g2, S.blush*0.15);
-    mctx.fillStyle = g2; mctx.fillRect(n[0]*s-nr, n[1]*s-nr, nr*2, nr*2);
   }
   lctx.setTransform(1,0,0,1,0,0); lctx.clearRect(0,0,lipCv.width,lipCv.height);
   const sl = lipCv.width / W, fwl = dist(P(234),P(454))*sl;
