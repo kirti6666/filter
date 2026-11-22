@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v43</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v44</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -84,7 +84,7 @@
     <div style="display:flex;gap:8px;margin-top:8px"><button id="copy">Copy JSON</button><span id="copied" class="small" style="align-self:center"></span></div>
   </aside>
 </main>
-<video id="video" playsinline muted style="display:none"></video>
+<video id="video" playsinline muted autoplay style="position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none;z-index:-1"></video>
 
 <script>
   // show any error on screen so phone-specific problems can be diagnosed from a screenshot
@@ -460,6 +460,7 @@ async function startWebcam(){
     stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:w},height:{ideal:h},facingMode:facing},audio:false});
     video.srcObject = stream; await video.play();
     await new Promise(r=> video.videoWidth ? r() : video.addEventListener('loadedmetadata', r, {once:true}));
+    for (let i=0; i<60 && video.videoWidth < 16; i++) await new Promise(r=>setTimeout(r,50));   // Android: wait for real frames, not the 2x2 placeholder
     $('mirror').checked = facing==='user'; setSource(video,true);
   }catch(e){ console.error(e); showErr('Camera: ' + e.name + ' - ' + (e.message||'') + (window.isSecureContext ? '' : ' (page not secure)')); }
 }
@@ -655,7 +656,7 @@ function upload(t, el){ gl.bindTexture(gl.TEXTURE_2D,t); gl.texImage2D(gl.TEXTUR
 function frame(now){
   requestAnimationFrame(frame);
   if (!src || W===0) return;
-  if (isVideo && video.readyState < 2) return;
+  if (isVideo && (video.readyState < 2 || video.videoWidth < 16)) return;
   if (isVideo && (video.videoWidth!==vidW || video.videoHeight!==vidH) && video.videoWidth) setSource(video,true);
 
   let lms = null;
