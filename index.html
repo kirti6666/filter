@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v34</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v35</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -376,7 +376,7 @@ function runSegmentation(now){
       const face = m[3].getAsFloat32Array(), body = m[2].getAsFloat32Array(), mw = m[3].width, mh = m[3].height;
       if (!segBuf || segBuf.length !== mw*mh){ segBuf = new Float32Array(mw*mh); segBuf._w = mw; segBuf._h = mh; segBuf._u8 = new Uint8Array(mw*mh); }
       const u8 = segBuf._u8;
-      for (let i=0;i<segBuf.length;i++){ const v = Math.max(face[i], body[i]*0.9); segBuf[i] += (v - segBuf[i])*0.55; u8[i] = segBuf[i]*255; }
+      for (let i=0;i<segBuf.length;i++){ const v = Math.max(face[i], body[i]*0.9); segBuf[i] += (v - segBuf[i])*0.45; u8[i] = segBuf[i]*255; }
       gl.bindTexture(gl.TEXTURE_2D, tSeg); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, mw, mh, 0, gl.RED, gl.UNSIGNED_BYTE, u8);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
@@ -406,7 +406,7 @@ function setSource(el, vid){
   vidW = vid ? el.videoWidth : el.width; vidH = vid ? el.videoHeight : el.height;
   const sc = vid ? Math.min(procScale, 1600/Math.max(vidW,vidH)) : 1;
   W = Math.round(vidW*sc); H = Math.round(vidH*sc);
-  segCv.width = 192; segCv.height = Math.max(64, Math.round(192*H/W)); segBuf = null; hasSeg = false;
+  segCv.width = 144; segCv.height = Math.max(64, Math.round(144*H/W)); segBuf = null; hasSeg = false;
   canvas.width=W; canvas.height=H;
   faceCv.width=makeCv.width=featCv.width=Math.round(W/4); faceCv.height=makeCv.height=featCv.height=Math.round(H/4);
   lipCv.width=Math.round(W/2); lipCv.height=Math.round(H/2);
@@ -421,7 +421,7 @@ const MOBILE = matchMedia('(pointer:coarse)').matches;
 async function startWebcam(){
   try{
     stopStream(); video.removeAttribute('src');
-    const w = 1920, h = 1080;  // capture Full HD; processing scale adapts to the phone's speed
+    const w = 1280, h = 720;   // 720p: Full HD is too heavy for phone browsers (native app will use full quality)
     stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:w},height:{ideal:h},facingMode:facing},audio:false});
     video.srcObject = stream; await video.play();
     await new Promise(r=> video.videoWidth ? r() : video.addEventListener('loadedmetadata', r, {once:true}));
@@ -619,14 +619,14 @@ function frame(now){
   if (landmarker){
     frameNo++;
     if (!isVideo && cachedLms) lms = cachedLms;
-    else if (MOBILE && isVideo && lastLms && frameNo % 2){ lms = lastLms; runSegmentation(now); }   // phones: skin model on the frames between face detections
+    else if (MOBILE && isVideo && lastLms && frameNo % 2){ lms = lastLms; if (frameNo % 6 === 1) runSegmentation(now); }   // phones: skin model ~5x/sec, between face detections
     else {
       const t0 = performance.now(), ts = Math.max(now, lastTs+1); lastTs = ts;
       try { const r = landmarker.detectForVideo(src, ts); lms = r.faceLandmarks && r.faceLandmarks[0]; } catch(e){ console.warn(e); }
       detMs = detMs*0.9 + (performance.now()-t0)*0.1;
       if (!isVideo) cachedLms = lms || null;
       lastLms = lms || null;
-      if (!MOBILE || !isVideo) runSegmentation(now);
+      if ((!MOBILE || !isVideo) && frameNo % 3 === 0) runSegmentation(now);
     }
   }
   if (lms && lms.length >= 468){ lastGood = lms; missCount = 0; }
