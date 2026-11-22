@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v42</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v43</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -86,6 +86,14 @@
 </main>
 <video id="video" playsinline muted style="display:none"></video>
 
+<script>
+  // show any error on screen so phone-specific problems can be diagnosed from a screenshot
+  function showErr(msg){ try{ const st=document.getElementById('status'); if(st) st.textContent='Error: '+msg;
+    let b=document.getElementById('errbox'); if(!b){ b=document.createElement('div'); b.id='errbox'; b.style.cssText='position:fixed;left:8px;right:8px;top:52px;z-index:99;background:#3a1020;color:#ffd5df;border:1px solid #ff4f8b;border-radius:8px;padding:8px;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap;max-height:40vh;overflow:auto'; document.body.appendChild(b); }
+    b.textContent += msg + '\n'; }catch(e){} }
+  window.addEventListener('error', e => showErr((e.message||'error') + (e.filename? ' @'+e.filename.split('/').pop()+':'+e.lineno : '')));
+  window.addEventListener('unhandledrejection', e => showErr('promise: ' + (e.reason && (e.reason.message || e.reason) )));
+</script>
 <script type="module">
 // ---------------------------------------------------------------- params
 const PARAMS = [
@@ -355,7 +363,7 @@ void main(){
   o = vec4(texture(uImg, vec2(q.x, 1.-q.y)).rgb, 1.);
 }`;
 
-function compile(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function compile(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ const m='Shader compile failed ('+(type===gl.VERTEX_SHADER?'vertex':'fragment')+'): '+gl.getShaderInfoLog(s)+' | GPU: '+(gl.getParameter(gl.RENDERER)||''); showErr(m); throw new Error(m); } return s; }
 function program(fs){
   const p=gl.createProgram(); gl.attachShader(p,compile(gl.VERTEX_SHADER,VS)); gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fs));
   gl.bindAttribLocation(p,0,'aPos'); gl.linkProgram(p);
@@ -453,7 +461,7 @@ async function startWebcam(){
     video.srcObject = stream; await video.play();
     await new Promise(r=> video.videoWidth ? r() : video.addEventListener('loadedmetadata', r, {once:true}));
     $('mirror').checked = facing==='user'; setSource(video,true);
-  }catch(e){ console.error(e); statusEl.textContent = 'Camera blocked or not found: ' + e.name; }
+  }catch(e){ console.error(e); showErr('Camera: ' + e.name + ' - ' + (e.message||'') + (window.isSecureContext ? '' : ' (page not secure)')); }
 }
 $('camBtn').onclick = startWebcam; $('hintCam').onclick = startWebcam;
 $('flipBtn').onclick = ()=>{ facing = facing==='user' ? 'environment' : 'user'; startWebcam(); };
