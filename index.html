@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v4</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v5</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -90,7 +90,7 @@
 // ---------------------------------------------------------------- params
 const PARAMS = [
   {g:'Beauty',  k:'smooth',   l:'Skin smoothing', d:0.55},
-  {g:'Beauty',  k:'brighten', l:'Brighten / whiten', d:0.30},
+  {g:'Beauty',  k:'brighten', l:'Whiten face', d:0.30},
   {g:'Beauty',  k:'rosy',     l:'Rosy glow', d:0.20},
   {g:'Beauty',  k:'even',     l:'Even skin tone', d:0},
   {g:'Beauty',  k:'soften',   l:'Soft focus (whole frame)', d:0},
@@ -108,7 +108,7 @@ const PARAMS = [
   {g:'Makeup',  k:'brows',    l:'Brows',     d:0.15, c:'browColor',   cd:'#3b2a20'},
 ];
 const PRESETS = {
-  'Hot Days': {smooth:0.72,soften:0.45,brighten:0,rosy:0,even:0.25,clarity:0,grade:0.9,glow:0.12,slim:0.08,vshape:0.05,eyes:0.08,nose:0.05,lips:0.28,blush:0.1,shadow:0.05,liner:0,brows:0.05, lipColor:'#c46a7a', blushColor:'#ff8fb1', shadowColor:'#d9967a'},
+  'Hot Days': {smooth:0.72,soften:0.35,brighten:0.3,rosy:0.12,even:0.25,clarity:0,grade:1,glow:0.12,slim:0.08,vshape:0.05,eyes:0.08,nose:0.05,lips:0.75,blush:0.1,shadow:0.05,liner:0,brows:0.05, lipColor:'#c76758', blushColor:'#ff8fb1', shadowColor:'#d9967a'},
   'Off':      {soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
@@ -216,7 +216,7 @@ void main(){
   res += (c - box) * uClarity * 1.6 * (1. - sm);
   // soft focus over the WHOLE frame, so the smoothed face doesn't stand out against sharp hair/background
   res = mix(res, mix(res, (c*0.2 + box*0.4 + box2*0.4), 0.9), uSoft);
-  float b = uBright * (0.8 + 0.2*face);               // brighten whole frame evenly
+  float b = uBright * face;                           // whiten face + visible skin only (background untouched)
   if (b > .001){ float beta = 1. + b*4.; res = log(clamp(res,0.,1.)*(beta-1.)+1.)/log(beta); }
   res = mix(res, res*vec3(1.04,.99,.99) + vec3(.02,0.,.01), uRosy*(0.35 + 0.65*face));
   if (uEven > .001 && uHasFace > .5){
@@ -231,12 +231,6 @@ void main(){
       float l = max(dot(c, vec3(.299,.587,.114)), .02);
       res *= mix(1., clamp((wl/wsum)/l, .88, 1.18), uEven*face*.5);
     }
-  }
-  vec4 m = texture(uMakeup, vUV);
-  if (m.a > .002){
-    vec3 base = clamp(res,0.,1.);
-    vec3 bl = mix(overlay(base, m.rgb), base*m.rgb*1.15, .35);
-    res = mix(base, bl, clamp(m.a,0.,1.));
   }
   res = clamp(res,0.,1.);
   if (uGlow > .001){
@@ -253,6 +247,15 @@ void main(){
     float lum0 = dot(res, vec3(.299,.587,.114));
     vec3 gr = M*res + vec3(0.057, 0.051, 0.069)*smoothstep(0.15, 0.6, lum0)*0.6;
     res = mix(res, clamp(gr,0.,1.), uGrade);
+  }
+  vec4 m = texture(uMakeup, vUV);
+  if (m.a > .002){
+    // makeup goes on after the colour grade, so the chosen colour is the colour you see
+    vec3 base = clamp(res,0.,1.);
+    float lb = dot(base, vec3(.299,.587,.114)), lm = max(dot(m.rgb, vec3(.299,.587,.114)), .02);
+    vec3 tint = clamp(m.rgb * pow(max(lb,.02)/lm, 0.6), 0., 1.);          // exact shade, keeps lip texture/shading
+    vec3 dark = mix(overlay(base, m.rgb), base*m.rgb*1.15, .35);          // liner / brows
+    res = mix(base, mix(dark, tint, smoothstep(.15,.35,lm)), clamp(m.a,0.,1.));
   }
   o = vec4(clamp(res,0.,1.), 1.);
 }`;
