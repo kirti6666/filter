@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filter Lab – Hot Days</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--line:#262a33;--text:#e8eaf0;--muted:#8b91a1;--accent:#ff4f8b}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overscroll-behavior:none}
+  body{display:flex;flex-direction:column;height:100dvh}
+  header{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);flex:none}
+  header h1{font-size:15px;margin:0;font-weight:650}
+  header .dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+  #status{margin-left:auto;color:var(--muted);font-size:11px;text-align:right}
+  main{flex:1;display:flex;min-height:0;position:relative}
+  .stage{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+  .view{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;min-height:0}
+  #out{max-width:100%;max-height:100%;display:block;touch-action:none}
+  .tag{position:absolute;top:10px;padding:3px 8px;border-radius:6px;background:rgba(0,0,0,.55);font-size:12px;display:none}
+  .tag.l{left:10px}.tag.r{right:10px}
+  .comparing .tag{display:block}
+  #fps{position:absolute;left:8px;bottom:6px;font-size:11px;color:#cfd3dc;background:rgba(0,0,0,.45);padding:2px 6px;border-radius:5px;font-variant-numeric:tabular-nums}
+  #fps:empty{display:none}
+  #hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
+  #hint p{color:var(--muted);max-width:420px;margin:0}
+  .strip{display:flex;gap:6px;overflow-x:auto;padding:8px 10px;background:var(--panel);border-top:1px solid var(--line);flex:none;scrollbar-width:none}
+  .strip::-webkit-scrollbar{display:none}
+  button,.btn{background:#232733;color:var(--text);border:1px solid #2f3440;border-radius:9px;padding:8px 12px;font:inherit;cursor:pointer;white-space:nowrap;flex:none}
+  button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .presets button{border-radius:999px;padding:7px 14px}
+  aside{width:340px;border-left:1px solid var(--line);background:var(--panel);overflow-y:auto;padding:6px 16px 30px}
+  aside h2{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:16px 0 6px}
+  .row{display:grid;grid-template-columns:1fr 44px;align-items:center;gap:2px 10px;margin:8px 0}
+  .row .lbl{display:flex;align-items:center;gap:8px}
+  .row .val{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+  .row input[type=range]{grid-column:1 / span 2;width:100%;accent-color:var(--accent);height:26px}
+  input[type=color]{width:24px;height:24px;border:none;padding:0;background:none;cursor:pointer}
+  textarea{width:100%;height:140px;background:#0f1115;color:#cfd3dc;border:1px solid var(--line);border-radius:8px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;padding:8px}
+  .small{font-size:12px;color:var(--muted)}
+  label.chk{display:flex;align-items:center;gap:8px;color:var(--muted);margin:10px 0}
+  #adjustBtn{display:none}
+  @media (max-width:900px){
+    aside{position:absolute;left:0;right:0;bottom:0;width:auto;max-height:48%;border-left:none;border-top:1px solid var(--line);border-radius:14px 14px 0 0;background:rgba(23,26,33,.96);display:none;z-index:5}
+    aside.open{display:block}
+    #adjustBtn{display:inline-block}
+  }
+</style>
+</head>
+<body>
+<header><span class="dot"></span><h1>Filter Lab</h1><span id="status">Loading face model…</span></header>
+<main>
+  <section class="stage">
+    <div class="view" id="view">
+      <canvas id="out" width="640" height="480"></canvas>
+      <div class="tag l">Original</div><div class="tag r">Filtered</div>
+      <div id="fps"></div>
+      <div id="hint">
+        <p>Live test of beauty, reshape and makeup filters. Nothing is uploaded anywhere. The video stays on your phone.</p>
+        <button class="primary" id="hintCam" style="font-size:16px;padding:12px 22px">Start camera</button>
+        <p class="small">When Chrome asks, tap <b>Allow</b> for camera.</p>
+      </div>
+    </div>
+    <div class="strip presets" id="presets"></div>
+    <div class="strip">
+      <button id="adjustBtn">Adjust ▲</button>
+      <button id="camBtn">Camera</button>
+      <button id="flipBtn">Flip</button>
+      <button id="compareBtn">Compare</button>
+      <button id="snap">Snapshot</button>
+      <label class="btn" for="file">Upload</label>
+      <input type="file" id="file" accept="image/*,video/*" hidden>
+    </div>
+  </section>
+  <aside id="panel">
+    <div id="controls"></div>
+    <h2>Options</h2>
+    <label class="chk"><input type="checkbox" id="mirror" checked> Mirror view</label>
+    <label class="chk"><input type="checkbox" id="showMesh"> Show face points</label>
+    <h2>Export settings</h2>
+    <p class="small">Send me this JSON when you like a look. It maps 1:1 to the native filter.</p>
+    <textarea id="json" readonly></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px"><button id="copy">Copy JSON</button><span id="copied" class="small" style="align-self:center"></span></div>
+  </aside>
+</main>
+<video id="video" playsinline muted style="display:none"></video>
+
+<script type="module">
+// ---------------------------------------------------------------- params
+const PARAMS = [
+  {g:'Beauty',  k:'smooth',   l:'Skin smoothing', d:0.55},
+  {g:'Beauty',  k:'brighten', l:'Brighten / whiten', d:0.30},
+  {g:'Beauty',  k:'rosy',     l:'Rosy glow', d:0.20},
+  {g:'Beauty',  k:'even',     l:'Even skin tone', d:0},
+  {g:'Beauty',  k:'clarity',  l:'Clarity (eyes, hair)', d:0.25},
+  {g:'Look',    k:'grade',    l:'Hot Days color', d:0},
+  {g:'Look',    k:'glow',     l:'Soft glow', d:0},
+  {g:'Reshape', k:'slim',     l:'Slim face', d:0.30},
+  {g:'Reshape', k:'vshape',   l:'V-shape jaw', d:0.20},
+  {g:'Reshape', k:'eyes',     l:'Big eyes', d:0.25},
+  {g:'Reshape', k:'nose',     l:'Narrow nose', d:0.20},
+  {g:'Makeup',  k:'lips',     l:'Lipstick',  d:0.35, c:'lipColor',    cd:'#c2185b'},
+  {g:'Makeup',  k:'blush',    l:'Blush',     d:0.25, c:'blushColor',  cd:'#ff6f91'},
+  {g:'Makeup',  k:'shadow',   l:'Eyeshadow', d:0.00, c:'shadowColor', cd:'#9c6b8e'},
+  {g:'Makeup',  k:'liner',    l:'Eyeliner',  d:0.00, c:'linerColor',  cd:'#141414'},
+  {g:'Makeup',  k:'brows',    l:'Brows',     d:0.15, c:'browColor',   cd:'#3b2a20'},
+];
+const PRESETS = {
+  'Hot Days': {smooth:0.85,brighten:0.05,rosy:0,even:0.6,clarity:0.1,grade:1,glow:0.25,slim:0.08,vshape:0.05,eyes:0.08,nose:0.05,lips:0.4,blush:0.2,shadow:0.08,liner:0,brows:0.05, lipColor:'#c25a5e', blushColor:'#e8838f', shadowColor:'#d9967a'},
+  'Off':      {even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
+  'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
+  'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
+  'Glam':     {smooth:0.7,brighten:0.4,rosy:0.2,clarity:0.35,slim:0.45,vshape:0.35,eyes:0.35,nose:0.3,lips:0.6,blush:0.3,shadow:0.45,liner:0.6,brows:0.35, lipColor:'#a3123a', blushColor:'#e86a7f', shadowColor:'#7a4a6e', linerColor:'#111111', browColor:'#2e2018'},
+  'Party':    {smooth:0.6,brighten:0.35,rosy:0.25,clarity:0.4,slim:0.4,vshape:0.3,eyes:0.4,nose:0.25,lips:0.7,blush:0.35,shadow:0.6,liner:0.7,brows:0.3, lipColor:'#d1005b', blushColor:'#ff5c8a', shadowColor:'#6a3fb5', linerColor:'#0b0b0b'},
+};
+const S = {};
+for (const p of PARAMS){ S[p.k]=p.d; if(p.c) S[p.c]=p.cd; }
+
+// ---------------------------------------------------------------- UI
+const $ = id => document.getElementById(id);
+const controls = $('controls'), inputs = {};
+let lastGroup = '';
+for (const p of PARAMS){
+  if (p.g !== lastGroup){ const h=document.createElement('h2'); h.textContent=p.g; controls.appendChild(h); lastGroup=p.g; }
+  const row = document.createElement('div'); row.className='row';
+  row.innerHTML = `<div class="lbl">${p.c?`<input type="color" data-c="${p.c}">`:''}<span>${p.l}</span></div><div class="val"></div><input type="range" min="0" max="100" step="1">`;
+  const r = row.querySelector('input[type=range]'), v = row.querySelector('.val'), c = row.querySelector('input[type=color]');
+  r.addEventListener('input', ()=>{ S[p.k]=r.value/100; v.textContent=r.value; clearPresetHighlight(); syncJSON(); });
+  if (c) c.addEventListener('input', ()=>{ S[p.c]=c.value; clearPresetHighlight(); syncJSON(); });
+  inputs[p.k] = {r,v,c,p};
+  controls.appendChild(row);
+}
+function syncUI(){ for (const k in inputs){ const {r,v,c,p}=inputs[k]; r.value=Math.round(S[k]*100); v.textContent=r.value; if(c) c.value=S[p.c]; } syncJSON(); }
+function syncJSON(){
+  const out = {}; for (const p of PARAMS){ out[p.k]=+S[p.k].toFixed(2); if(p.c) out[p.c]=S[p.c]; }
+  $('json').value = JSON.stringify(out, null, 2);
+}
+const presetBox = $('presets');
+for (const name in PRESETS){
+  const b = document.createElement('button'); b.textContent = name;
+  b.onclick = ()=>{ Object.assign(S, PRESETS.Off, PRESETS[name]); syncUI(); for(const x of presetBox.children) x.classList.toggle('on', x===b); };
+  presetBox.appendChild(b);
+}
+function clearPresetHighlight(){ for(const x of presetBox.children) x.classList.remove('on'); }
+Object.assign(S, PRESETS.Off, PRESETS['Hot Days']); syncUI(); presetBox.children[0].classList.add('on');
+$('copy').onclick = async ()=>{ try{ await navigator.clipboard.writeText($('json').value); $('copied').textContent='Copied'; }catch{ $('json').select(); $('copied').textContent='Press Ctrl+C'; } };
+
+// ---------------------------------------------------------------- face model
+const statusEl = $('status');
+let landmarker = null;
+(async ()=>{
+  try{
+    const V = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+    const { FaceLandmarker, FilesetResolver } = await import(V + '/vision_bundle.mjs');
+    const fileset = await FilesetResolver.forVisionTasks(V + '/wasm');
+    const opts = (delegate)=>({ baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate }, runningMode:'VIDEO', numFaces:1 });
+    try { landmarker = await FaceLandmarker.createFromOptions(fileset, opts('GPU')); }
+    catch { landmarker = await FaceLandmarker.createFromOptions(fileset, opts('CPU')); }
+    statusEl.textContent = 'Face model ready';
+  }catch(e){
+    console.error(e);
+    statusEl.textContent = 'Face model failed to load (check internet). Skin filters still work.';
+  }
+})();
+
+// ---------------------------------------------------------------- WebGL
+const canvas = $('out');
+const gl = canvas.getContext('webgl2', {preserveDrawingBuffer:true, premultipliedAlpha:false});
+if (!gl){ statusEl.textContent = 'WebGL2 not supported in this browser'; throw new Error('no webgl2'); }
+
+const VS = `#version 300 es
+in vec2 aPos; out vec2 vUV;
+void main(){ vUV = vec2(aPos.x*0.5+0.5, 0.5-aPos.y*0.5); gl_Position = vec4(aPos,0.,1.); }`;
+
+// Pass 1: skin smoothing + tone + makeup (image space)
+const FS1 = `#version 300 es
+precision highp float;
+in vec2 vUV; out vec4 o;
+uniform sampler2D uSrc, uFace, uMakeup;
+uniform vec2 uRes;
+uniform float uSmooth, uBright, uRosy, uClarity, uHasFace, uGrade, uGlow, uEven;
+vec3 overlay(vec3 b, vec3 s){ return mix(2.*b*s, 1.-2.*(1.-b)*(1.-s), step(.5,b)); }
+float skin(vec3 c){
+  float cb = 0.5 + (-0.168736*c.r - 0.331264*c.g + 0.5*c.b);
+  float cr = 0.5 + ( 0.5*c.r - 0.418688*c.g - 0.081312*c.b);
+  return smoothstep(.29,.33,cb)*(1.-smoothstep(.49,.53,cb))*smoothstep(.51,.55,cr)*(1.-smoothstep(.67,.71,cr));
+}
+void main(){
+  vec3 c = texture(uSrc, vUV).rgb;
+  float sk = skin(c);
+  // face mask (soft) + skin colour elsewhere (neck, ears) so there is no visible boundary
+  float face = uHasFace > .5 ? max(texture(uFace, vUV).a, sk*0.55) : sk*.8;
+  vec2 px = 1.0/uRes;
+  float rad = max(1.0, uRes.y*0.0055);
+  float sigR = 0.06 + 0.10*uSmooth;
+  vec3 sum = c, box = vec3(0.); float ws = 1.0;
+  for (int ring=1; ring<=3; ring++){
+    float r = float(ring)*rad;
+    float sp = exp(-float(ring*ring)/5.0);
+    for (int i=0;i<12;i++){
+      float a = (float(i) + (ring==2 ? .5 : 0.)) * 0.5235988;
+      vec3 s = texture(uSrc, vUV + vec2(cos(a),sin(a))*r*px).rgb;
+      if (ring==1) box += s;
+      vec3 d = s - c;
+      float w = sp * exp(-dot(d,d)/(2.*sigR*sigR));
+      sum += s*w; ws += w;
+    }
+  }
+  box /= 12.;
+  float sm = clamp(uSmooth*face*1.15, 0., 1.);
+  vec3 res = mix(c, sum/ws, sm);
+  res += (c - box) * 0.10 * sm;                       // keep a little real skin texture
+  res += (c - box) * uClarity * 1.6 * (1. - sm);
+  float b = uBright * (0.8 + 0.2*face);               // brighten whole frame evenly
+  if (b > .001){ float beta = 1. + b*4.; res = log(clamp(res,0.,1.)*(beta-1.)+1.)/log(beta); }
+  res = mix(res, res*vec3(1.04,.99,.99) + vec3(.02,0.,.01), uRosy*(0.35 + 0.65*face));
+  if (uEven > .001 && uHasFace > .5){
+    // flatten face shading: pull each pixel toward the average skin brightness around it
+    float wl = 0., wsum = 0.; float r2 = uRes.y*0.05;
+    for (int i=0;i<12;i++){
+      float a = float(i)*0.5235988 + 0.13; vec2 q = vUV + vec2(cos(a),sin(a))*r2*px;
+      float fm = texture(uFace, q).a;
+      wl += dot(texture(uSrc, q).rgb, vec3(.299,.587,.114))*fm; wsum += fm;
+    }
+    if (wsum > .5){
+      float l = max(dot(c, vec3(.299,.587,.114)), .02);
+      res *= mix(1., clamp((wl/wsum)/l, .8, 1.3), uEven*face*.6);
+    }
+  }
+  vec4 m = texture(uMakeup, vUV);
+  if (m.a > .002){
+    vec3 base = clamp(res,0.,1.);
+    vec3 bl = mix(overlay(base, m.rgb), base*m.rgb*1.15, .35);
+    res = mix(base, bl, clamp(m.a,0.,1.));
+  }
+  res = clamp(res,0.,1.);
+  if (uGlow > .001){
+    vec3 wide = vec3(0.); float r = uRes.y*0.022;
+    for (int i=0;i<12;i++){ float a = float(i)*0.5235988 + 0.26; wide += texture(uSrc, vUV + vec2(cos(a),sin(a))*r*px).rgb; }
+    wide /= 12.;
+    vec3 g = max(wide - 0.45, 0.)*1.8;
+    res = 1. - (1.-res)*(1. - g*uGlow*0.8);
+    res = mix(res, mix(res, wide, 0.22), uGlow);
+  }
+  if (uGrade > .001){
+    // colour transform fitted to the reference Hot Days video (warm, saturated, golden-peach skin)
+    mat3 M = mat3( 1.194, 0.019,-0.203,   -0.117, 0.932,-0.022,   -0.218,-0.075, 1.091);
+    vec3 gr = M*res + vec3(0.057, 0.051, 0.069);
+    res = mix(res, clamp(gr,0.,1.), uGrade);
+  }
+  o = vec4(clamp(res,0.,1.), 1.);
+}`;
+
+// Pass 2: face reshape warps + compare + mirror
+const FS2 = `#version 300 es
+precision highp float;
+in vec2 vUV; out vec4 o;
+uniform sampler2D uImg, uOrig;
+uniform vec2 uRes;
+uniform float uMirror, uSplit, uHasFace;
+uniform vec4 uWarp[12]; uniform float uWarpR[12]; uniform int uNW;
+uniform vec4 uEyes; uniform float uEyeR, uEyeS;
+void main(){
+  vec2 uv = vUV; if (uMirror > .5) uv.x = 1. - uv.x;
+  if (uSplit > 0. && abs(gl_FragCoord.x - uSplit*uRes.x) < 1.5){ o = vec4(1.); return; }
+  if (vUV.x < uSplit){ o = vec4(texture(uOrig, uv).rgb, 1.); return; }
+  vec2 p = uv*uRes;
+  if (uHasFace > .5){
+    for (int i=0;i<12;i++){
+      if (i >= uNW) break;
+      vec2 c = uWarp[i].xy, m = uWarp[i].zw - uWarp[i].xy;
+      float rr = uWarpR[i]*uWarpR[i];
+      vec2 d = p - c; float dd = dot(d,d);
+      if (dd < rr){ float k = (rr-dd)/(rr-dd+dot(m,m)); p -= k*k*m; }
+    }
+    for (int e=0;e<2;e++){
+      vec2 c = e==0 ? uEyes.xy : uEyes.zw;
+      vec2 d = p - c; float dist = length(d);
+      if (dist < uEyeR){ float t = dist/uEyeR; p = c + d*(1. - uEyeS*(1.-t*t)); }
+    }
+  }
+  vec2 q = p/uRes;
+  o = vec4(texture(uImg, vec2(q.x, 1.-q.y)).rgb, 1.);
+}`;
+
+function compile(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function program(fs){
+  const p=gl.createProgram(); gl.attachShader(p,compile(gl.VERTEX_SHADER,VS)); gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fs));
+  gl.bindAttribLocation(p,0,'aPos'); gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u={}; const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){ const name=gl.getActiveUniform(p,i).name.replace('[0]',''); u[name]=gl.getUniformLocation(p,name); }
+  return {p,u};
+}
+const P1 = program(FS1), P2 = program(FS2);
+const vbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+function tex(){ const t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,0])); return t; }
+const tSrc=tex(), tFace=tex(), tMake=tex(), tMid=tex(), tEmpty=tex();
+const fbo = gl.createFramebuffer();
+
+// ---------------------------------------------------------------- masks (2D canvases)
+const faceCv = document.createElement('canvas'), makeCv = document.createElement('canvas');
+const fctx = faceCv.getContext('2d'), mctx = makeCv.getContext('2d');
+
+// ---------------------------------------------------------------- source
+const video = $('video');
+let src=null, isVideo=false, W=0, H=0, stream=null, cachedLms=null;
+function setSource(el, vid){
+  src=el; isVideo=vid; cachedLms=null; prevPts=null;
+  W = vid ? el.videoWidth : el.width; H = vid ? el.videoHeight : el.height;
+  canvas.width=W; canvas.height=H;
+  faceCv.width=makeCv.width=Math.round(W/2); faceCv.height=makeCv.height=Math.round(H/2);
+  gl.bindTexture(gl.TEXTURE_2D,tMid); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,W,H,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fbo); gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tMid,0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  $('hint').style.display='none';
+}
+function stopStream(){ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } }
+let facing = 'user';
+const MOBILE = matchMedia('(pointer:coarse)').matches;
+async function startWebcam(){
+  try{
+    stopStream(); video.removeAttribute('src');
+    const w = MOBILE ? 960 : 1280, h = MOBILE ? 540 : 720;
+    stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:w},height:{ideal:h},facingMode:facing},audio:false});
+    video.srcObject = stream; await video.play();
+    await new Promise(r=> video.videoWidth ? r() : video.addEventListener('loadedmetadata', r, {once:true}));
+    $('mirror').checked = facing==='user'; setSource(video,true);
+  }catch(e){ console.error(e); statusEl.textContent = 'Camera blocked or not found: ' + e.name; }
+}
+$('camBtn').onclick = startWebcam; $('hintCam').onclick = startWebcam;
+$('flipBtn').onclick = ()=>{ facing = facing==='user' ? 'environment' : 'user'; startWebcam(); };
+function placePanel(){ const st=document.querySelectorAll('.strip'); let h=0; st.forEach(x=>h+=x.offsetHeight); $('panel').style.bottom = (innerWidth<=900 ? h : 0)+'px'; }
+addEventListener('resize', placePanel); placePanel();
+$('adjustBtn').onclick = ()=>{ placePanel(); const o=$('panel').classList.toggle('open'); $('adjustBtn').textContent = o ? 'Adjust ▼' : 'Adjust ▲'; };
+$('file').onchange = async (ev)=>{
+  const f = ev.target.files[0]; if(!f) return;
+  stopStream(); video.srcObject = null;
+  const url = URL.createObjectURL(f);
+  if (f.type.startsWith('video/')){
+    video.src = url; video.loop = true; video.muted = true;
+    await video.play().catch(()=>{});
+    await new Promise(r=> video.readyState>=2 ? r() : video.addEventListener('loadeddata', r, {once:true}));
+    $('mirror').checked = false; setSource(video,true);
+  } else {
+    const img = new Image(); img.src = url; await img.decode();
+    const sc = Math.min(1, 1280/Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = document.createElement('canvas'); cv.width=Math.round(img.naturalWidth*sc); cv.height=Math.round(img.naturalHeight*sc);
+    cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+    $('mirror').checked = false; setSource(cv,false);
+  }
+  ev.target.value='';
+};
+
+// compare drag
+let split = 0;
+const view = $('view');
+$('compareBtn').onclick = ()=>{ const on = split===0; split = on ? 0.5 : 0; view.classList.toggle('comparing', on); $('compareBtn').classList.toggle('on', on); };
+let dragging=false;
+canvas.addEventListener('pointerdown', e=>{ if(split>0){ dragging=true; canvas.setPointerCapture(e.pointerId); moveSplit(e);} });
+canvas.addEventListener('pointermove', e=>{ if(dragging) moveSplit(e); });
+canvas.addEventListener('pointerup', ()=> dragging=false);
+function moveSplit(e){ const r=canvas.getBoundingClientRect(); split=Math.min(.98,Math.max(.02,(e.clientX-r.left)/r.width)); }
+
+$('snap').onclick = ()=>{ canvas.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='beauty-lab-snapshot.png'; a.click(); }); };
+
+// ---------------------------------------------------------------- landmark indices (MediaPipe Face Mesh)
+const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+const LIPS_OUT=[61,146,91,181,84,17,314,405,321,375,291,409,270,269,267,0,37,39,40,185];
+const LIPS_IN=[78,95,88,178,87,14,317,402,318,324,308,415,310,311,312,13,82,81,80,191];
+const EYE_R=[33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
+const EYE_L=[263,249,390,373,374,380,381,382,362,398,384,385,386,387,388,466];
+const LID_R=[133,173,157,158,159,160,161,246,33];   // inner -> outer
+const LID_L=[362,398,384,385,386,387,388,466,263];
+const BROW_R=[70,63,105,66,107,55,65,52,53,46];
+const BROW_L=[300,293,334,296,336,285,295,282,283,276];
+
+let pts = null, prevPts = null;
+const P = i => [pts[i*2], pts[i*2+1]];
+const dist = (a,b)=> Math.hypot(a[0]-b[0], a[1]-b[1]);
+const lerp = (a,b,t)=> [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t];
+const centroid = ids => { let x=0,y=0; for(const i of ids){ x+=pts[i*2]; y+=pts[i*2+1]; } return [x/ids.length, y/ids.length]; };
+function hexA(hex, a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${Math.max(0,Math.min(1,a)).toFixed(3)})`; }
+
+function updatePoints(lms){
+  const n = lms.length;
+  if (!pts || pts.length !== n*2) pts = new Float32Array(n*2);
+  const raw = new Float32Array(n*2);
+  for (let i=0;i<n;i++){ raw[i*2]=lms[i].x*W; raw[i*2+1]=lms[i].y*H; }
+  if (prevPts && prevPts.length===raw.length && isVideo){
+    // adaptive smoothing: steady when still, responsive when moving
+    const fw = Math.hypot(raw[234*2]-raw[454*2], raw[234*2+1]-raw[454*2+1]) || 1;
+    const mv = Math.hypot(raw[2]-prevPts[2], raw[3]-prevPts[3]);
+    const a = Math.min(1, 0.3 + mv/(fw*0.025));
+    for (let i=0;i<raw.length;i++) pts[i] = prevPts[i] + (raw[i]-prevPts[i])*a;
+  } else pts.set(raw);
+  prevPts = Float32Array.from(pts);
+}
+
+function path(ctx, ids, s, close=true){ ctx.moveTo(pts[ids[0]*2]*s, pts[ids[0]*2+1]*s); for(let k=1;k<ids.length;k++) ctx.lineTo(pts[ids[k]*2]*s, pts[ids[k]*2+1]*s); if(close) ctx.closePath(); }
+// Soft (blurred) drawing that works in every browser, Safari included:
+// draw the shape far off-canvas and let its shadow (which is blurred) land in place.
+const OFF = 30000;
+function soft(ctx, px, color, build, mode='fill', rule='nonzero'){
+  ctx.save();
+  if (px > 0.4){ ctx.translate(-OFF,0); ctx.shadowOffsetX = OFF; ctx.shadowBlur = px*2; ctx.shadowColor = color; ctx.fillStyle = ctx.strokeStyle = '#000'; }
+  else { ctx.fillStyle = ctx.strokeStyle = color; }
+  ctx.beginPath(); build();
+  if (mode==='fill') ctx.fill(rule); else ctx.stroke();
+  ctx.restore();
+}
+function pathPts(ctx, arr, s){ ctx.moveTo(arr[0][0]*s, arr[0][1]*s); for (let k=1;k<arr.length;k++) ctx.lineTo(arr[k][0]*s, arr[k][1]*s); ctx.closePath(); }
+// MediaPipe's face oval stops below the hairline: extend the forehead and widen slightly
+function faceOutline(){
+  const c = P(168), fh = dist(c, P(152));
+  return OVAL.map(i=>{ const p=P(i); const dx=p[0]-c[0], dy=p[1]-c[1];
+    let k = 1.05; if (dy < 0) k += 0.40*Math.min(1, -dy/(fh*0.6));
+    return [c[0]+dx*k, c[1]+dy*k]; });
+}
+
+function drawMasks(){
+  const s = faceCv.width / W, fw = dist(P(234),P(454))*s;
+  // --- face mask: (extended) face oval minus eyes, brows, lips — very soft edges
+  fctx.setTransform(1,0,0,1,0,0); fctx.clearRect(0,0,faceCv.width,faceCv.height);
+  fctx.globalCompositeOperation='source-over';
+  const outline = faceOutline();
+  soft(fctx, fw*0.06, '#fff', ()=> pathPts(fctx, outline, s));
+  fctx.globalCompositeOperation='destination-out';
+  soft(fctx, fw*0.012, 'rgba(0,0,0,1)', ()=>{ path(fctx,EYE_R,s); path(fctx,EYE_L,s); path(fctx,BROW_R,s); path(fctx,BROW_L,s); });
+  soft(fctx, fw*0.008, 'rgba(0,0,0,.85)', ()=> path(fctx,LIPS_OUT,s));
+  fctx.globalCompositeOperation='source-over';
+
+  // --- makeup layer
+  mctx.setTransform(1,0,0,1,0,0); mctx.clearRect(0,0,makeCv.width,makeCv.height);
+  if (S.brows>0) soft(mctx, fw*0.01, hexA(S.browColor, S.brows*0.6), ()=>{ path(mctx,BROW_R,s); path(mctx,BROW_L,s); });
+  if (S.shadow>0){
+    for (const [lid, eye, brow] of [[LID_R,EYE_R,BROW_R],[LID_L,EYE_L,BROW_L]]){
+      const up = centroid(brow), ec = centroid(eye), v=[(up[0]-ec[0])*0.5, (up[1]-ec[1])*0.5];
+      soft(mctx, fw*0.03, hexA(S.shadowColor, S.shadow*0.75), ()=>{
+        path(mctx, lid, s, false);
+        for (let k=lid.length-1;k>=0;k--){ const t=k/(lid.length-1), f=0.35+0.65*Math.sin(Math.PI*(0.15+0.85*t)); const p=P(lid[k]); mctx.lineTo((p[0]+v[0]*f)*s, (p[1]+v[1]*f)*s); }
+        mctx.closePath(); });
+    }
+  }
+  if (S.liner>0){
+    mctx.lineWidth = fw*(0.006+0.012*S.liner); mctx.lineCap='round'; mctx.lineJoin='round';
+    for (const lid of [LID_R, LID_L]){
+      const n=lid.length, outer=P(lid[n-1]), prev=P(lid[n-3]), ew=dist(P(lid[0]),outer);
+      const dx=outer[0]-prev[0], dy=outer[1]-prev[1], dl=Math.hypot(dx,dy)||1;
+      const wing=[outer[0]+(dx/dl)*ew*0.28*S.liner, outer[1]+(dy/dl)*ew*0.28*S.liner - ew*0.12*S.liner];
+      soft(mctx, fw*0.003, hexA(S.linerColor, Math.min(1, 0.35+S.liner*0.75)), ()=>{ path(mctx, lid.slice(2), s, false); mctx.lineTo(wing[0]*s, wing[1]*s); }, 'stroke');
+    }
+  }
+  if (S.blush>0){
+    for (const [ch, edge] of [[50,234],[280,454]]){
+      const c = lerp(P(ch), P(edge), 0.18), r = fw*0.16;
+      const g = mctx.createRadialGradient(c[0]*s,c[1]*s,0,c[0]*s,c[1]*s,r);
+      g.addColorStop(0, hexA(S.blushColor, S.blush*0.55)); g.addColorStop(0.5, hexA(S.blushColor, S.blush*0.3)); g.addColorStop(1, hexA(S.blushColor, 0));
+      mctx.fillStyle=g; mctx.beginPath(); mctx.ellipse(c[0]*s,c[1]*s,r,r*0.8,0,0,Math.PI*2); mctx.fill();
+    }
+    const n = P(1), nr = fw*0.07;
+    const g2 = mctx.createRadialGradient(n[0]*s,n[1]*s,0,n[0]*s,n[1]*s,nr);
+    g2.addColorStop(0, hexA(S.blushColor, S.blush*0.3)); g2.addColorStop(1, hexA(S.blushColor, 0));
+    mctx.fillStyle=g2; mctx.beginPath(); mctx.arc(n[0]*s,n[1]*s,nr,0,Math.PI*2); mctx.fill();
+  }
+  if (S.lips>0) soft(mctx, fw*0.007, hexA(S.lipColor, 0.2+S.lips*0.65), ()=>{ path(mctx,LIPS_OUT,s); path(mctx,LIPS_IN,s); }, 'fill', 'evenodd');
+}
+
+const warpArr = new Float32Array(48), warpR = new Float32Array(12);
+let nWarp=0, eyes=[0,0,0,0], eyeR=1, eyeS=0;
+function computeWarps(){
+  nWarp=0;
+  const fw = dist(P(234),P(454));
+  const add = (i, target, k, r)=>{ if(k<=0||nWarp>=12) return; const c=P(i); warpArr.set([c[0],c[1],c[0]+(target[0]-c[0])*k, c[1]+(target[1]-c[1])*k], nWarp*4); warpR[nWarp]=r; nWarp++; };
+  const mid = P(164);
+  for (const i of [132,58,361,288]) add(i, mid, S.slim*0.10, fw*0.30);
+  for (const i of [172,397,136,365]) add(i, P(152), S.vshape*0.12, fw*0.20);
+  const nm = lerp(P(129),P(358),0.5), nw = dist(P(129),P(358));
+  for (const i of [129,358]) add(i, nm, S.nose*0.28, nw*0.55);
+  const er = centroid(EYE_R), el = centroid(EYE_L);
+  eyes = [er[0],er[1],el[0],el[1]];
+  eyeR = dist(P(33),P(133))*1.05; eyeS = S.eyes*0.22;
+}
+
+// ---------------------------------------------------------------- render loop
+let lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
+function upload(t, el){ gl.bindTexture(gl.TEXTURE_2D,t); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,el); }
+function frame(now){
+  requestAnimationFrame(frame);
+  if (!src || W===0) return;
+  if (isVideo && video.readyState < 2) return;
+  if (isVideo && (video.videoWidth!==W || video.videoHeight!==H) && video.videoWidth) setSource(video,true);
+
+  let lms = null;
+  if (landmarker){
+    if (!isVideo && cachedLms) lms = cachedLms;
+    else {
+      const t0 = performance.now(), ts = Math.max(now, lastTs+1); lastTs = ts;
+      try { const r = landmarker.detectForVideo(src, ts); lms = r.faceLandmarks && r.faceLandmarks[0]; } catch(e){ console.warn(e); }
+      detMs = detMs*0.9 + (performance.now()-t0)*0.1;
+      if (!isVideo) cachedLms = lms || null;
+    }
+  }
+  const hasFace = !!(lms && lms.length >= 468);
+  if (hasFace){ updatePoints(lms); drawMasks(); computeWarps(); } else prevPts = null;
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+  upload(tSrc, src);
+  if (hasFace){ upload(tFace, faceCv); upload(tMake, makeCv); }
+
+  // pass 1
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fbo); gl.viewport(0,0,W,H); gl.useProgram(P1.p);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,tSrc);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,tFace);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,tMake);
+  const u1=P1.u;
+  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2);
+  gl.uniform2f(u1.uRes,W,H); gl.uniform1f(u1.uSmooth,S.smooth); gl.uniform1f(u1.uBright,S.brighten);
+  gl.uniform1f(u1.uGrade,S.grade); gl.uniform1f(u1.uEven,S.even); gl.uniform1f(u1.uGlow,S.glow); gl.uniform1f(u1.uRosy,S.rosy); gl.uniform1f(u1.uClarity,S.clarity); gl.uniform1f(u1.uHasFace,hasFace?1:0);
+  if (!hasFace){ gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,tEmpty); } // no makeup without a face
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+
+  // pass 2
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.viewport(0,0,W,H); gl.useProgram(P2.p);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,tMid);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,tSrc);
+  const u2=P2.u;
+  gl.uniform1i(u2.uImg,0); gl.uniform1i(u2.uOrig,1); gl.uniform2f(u2.uRes,W,H);
+  gl.uniform1f(u2.uMirror,$('mirror').checked?1:0); gl.uniform1f(u2.uSplit,split); gl.uniform1f(u2.uHasFace,hasFace?1:0);
+  gl.uniform4fv(u2.uWarp,warpArr); gl.uniform1fv(u2.uWarpR,warpR); gl.uniform1i(u2.uNW,hasFace?nWarp:0);
+  gl.uniform4f(u2.uEyes,eyes[0],eyes[1],eyes[2],eyes[3]); gl.uniform1f(u2.uEyeR,eyeR); gl.uniform1f(u2.uEyeS,hasFace?eyeS:0);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+
+  if ($('showMesh').checked && hasFace) drawMeshOverlay();
+  else meshCv.style.display='none';
+
+  frames++;
+  if (now - fpsT > 500){ $('fps').textContent = `${(frames*1000/(now-fpsT)).toFixed(0)} fps · face ${hasFace?'✓':'—'} · detect ${detMs.toFixed(1)} ms · ${W}×${H}`; frames=0; fpsT=now; }
+}
+
+// landmark overlay (debug)
+const meshCv = document.createElement('canvas');
+meshCv.style.cssText='position:absolute;pointer-events:none;display:none';
+view.appendChild(meshCv);
+function drawMeshOverlay(){
+  const r = canvas.getBoundingClientRect(), vr = view.getBoundingClientRect();
+  meshCv.style.display='block'; meshCv.style.left=(r.left-vr.left)+'px'; meshCv.style.top=(r.top-vr.top)+'px';
+  meshCv.width=r.width; meshCv.height=r.height; meshCv.style.width=r.width+'px'; meshCv.style.height=r.height+'px';
+  const c = meshCv.getContext('2d'), sx=r.width/W, sy=r.height/H, mir=$('mirror').checked;
+  c.fillStyle='rgba(0,255,180,.8)';
+  for (let i=0;i<pts.length/2;i++){ const x = mir ? (W-pts[i*2])*sx : pts[i*2]*sx; c.fillRect(x-1, pts[i*2+1]*sy-1, 2, 2); }
+}
+
+requestAnimationFrame(frame);
+window.__lab = { S, get landmarker(){ return landmarker; }, set landmarker(v){ landmarker=v; } };
+</script>
+</body>
+</html>
