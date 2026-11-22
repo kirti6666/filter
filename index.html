@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v47</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v48</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -439,10 +439,13 @@ const fctx = faceCv.getContext('2d'), mctx = makeCv.getContext('2d'), lctx = lip
 const video = $('video');
 let src=null, isVideo=false, W=0, H=0, vidW=0, vidH=0, procScale=1, stream=null, cachedLms=null;
 function setSource(el, vid){
-  src=el; isVideo=vid; cachedLms=null; prevPts=null; slidersDirty=true;
+  const sameSrc = (el === src && vid === isVideo), oldW = W, oldH = H;
+  src=el; isVideo=vid; cachedLms=null; slidersDirty=true;
+  if (!sameSrc) prevPts=null;
   vidW = el.videoWidth || el.width; vidH = el.videoHeight || el.height;
   const sc = vid ? Math.min(procScale, S.scale > 0 ? S.scale : 1, 1600/Math.max(vidW,vidH)) : 1;
   W = Math.round(vidW*sc); H = Math.round(vidH*sc);
+  if (sameSrc && prevPts && oldW && oldH){ const fx=W/oldW, fy=H/oldH; for (const a of [prevPts, pts]) if (a) for (let i=0;i<a.length;i+=2){ a[i]*=fx; a[i+1]*=fy; } }
   segCv.width = 144; segCv.height = Math.max(64, Math.round(144*H/W)); segBuf = null; hasSeg = false;
   canvas.width=W; canvas.height=H;
   faceCv.width=makeCv.width=featCv.width=Math.round(W/4); faceCv.height=makeCv.height=featCv.height=Math.round(H/4);
@@ -457,6 +460,7 @@ let facing = 'user';
 const MOBILE = matchMedia('(pointer:coarse)').matches;
 // Camera: three strategies, tried in order, because some Android phones never feed frames to <video>
 let liveCv = null, procReader = null, camMode = '';
+let newVF = true, rvfcOn = false;   // process only when the camera delivers a NEW frame (90/120 Hz phones re-render otherwise)
 function stopProc(){ if (procReader){ try{ procReader.cancel(); }catch(e){} procReader = null; } }
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 async function waitFrames(el, ms){ for (let t=0; t<ms && (el.videoWidth||0) < 16; t+=50){ if (el.paused) el.play().catch(()=>{}); await sleep(50); } return (el.videoWidth||0) >= 16; }
@@ -464,6 +468,7 @@ async function attachToVideo(){
   video.srcObject = stream; video.muted = true; video.playsInline = true;
   await Promise.race([ video.play().catch(()=>{}), sleep(1500) ]);
   if (!video._resume){ video._resume = true; video.addEventListener('pause', ()=>{ if (stream && src === video) video.play().catch(()=>{}); }); }
+  if ('requestVideoFrameCallback' in video && !rvfcOn){ rvfcOn = true; const cb = ()=>{ newVF = true; video.requestVideoFrameCallback(cb); }; video.requestVideoFrameCallback(cb); }
   return waitFrames(video, 2500);
 }
 async function startProcessor(track){
@@ -479,7 +484,7 @@ async function startProcessor(track){
         const cw = (rot===90||rot===270) ? h : w, ch = (rot===90||rot===270) ? w : h;
         if (liveCv.width !== cw || liveCv.height !== ch){ liveCv.width = cw; liveCv.height = ch; }
         lc.save(); lc.translate(cw/2, ch/2); lc.rotate(rot*Math.PI/180); lc.drawImage(f, -w/2, -h/2, w, h); lc.restore();
-        f.close();
+        f.close(); newVF = true;
         if (first){ first = false; liveCv._ready = true; }
       }
     } catch(e){ showErr('frames: ' + (e.message||e)); }
@@ -706,6 +711,8 @@ function frame(now){
   if (isVideo && src === video && (video.readyState < 2 || video.videoWidth < 16)) return;
   if (isVideo && src === video && (video.videoWidth!==vidW || video.videoHeight!==vidH) && video.videoWidth) setSource(video,true);
   if (isVideo && liveCv && src === liveCv && (liveCv.width!==vidW || liveCv.height!==vidH)) setSource(liveCv,true);
+  if (isVideo && (rvfcOn || src === liveCv) && !newVF && !slidersDirty && !wantSnap) return;   // same camera frame: nothing new to process
+  newVF = false;
 
   let lms = null;
   if (landmarker){
@@ -729,8 +736,8 @@ function frame(now){
   let ovx = 0, ovy = 0;
   if (hasFace){ if (fresh) updatePoints(lms, now); if (fresh || slidersDirty) drawMasks(); computeWarps(); } else prevPts = null;
   if (hasFace && !fresh && isVideo && dxs){
-    const dt = Math.min(0.1, (now - lastPtsT)/1000), k = 13*2;           // lip centre velocity (px/s) x time since last detection
-    ovx = Math.max(-0.05, Math.min(0.05, dxs[k]*dt/W)); ovy = Math.max(-0.05, Math.min(0.05, dxs[k+1]*dt/H));
+    const dt = Math.min(0.06, (now - lastPtsT)/1000), k = 13*2;          // lip centre velocity (px/s) x time since last detection (damped, no overshoot)
+    ovx = Math.max(-0.03, Math.min(0.03, 0.6*dxs[k]*dt/W)); ovy = Math.max(-0.03, Math.min(0.03, 0.6*dxs[k+1]*dt/H));
   }
 
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
@@ -769,7 +776,7 @@ function frame(now){
   else meshCv.style.display='none';
 
   frames++;
-  if (isVideo && now - fpsT > 500 && frames*1000/(now-fpsT) < 22){ slowCount = (slowCount||0) + 1;
+  if (isVideo && now - fpsT > 500 && frames*1000/(now-fpsT) < 17){ slowCount = (slowCount||0) + 1;
     if (slowCount >= 4 && procScale > 0.7){ procScale = Math.max(0.67, procScale - 0.17); slowCount = 0; setSource(src, true); } }
   else if (now - fpsT > 500) slowCount = 0;
   if (now - fpsT > 500){ lastFps = frames*1000/(now-fpsT); $('fps').textContent = `${(frames*1000/(now-fpsT)).toFixed(0)} fps · face ${hasFace?'✓':'—'} · detect ${detMs.toFixed(1)} ms · ${W}×${H}`; frames=0; fpsT=now; }
