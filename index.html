@@ -51,7 +51,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v9</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v10</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -119,6 +119,7 @@ const PRESETS = {
   'Party':    {smooth:0.6,brighten:0.35,rosy:0.25,clarity:0.4,slim:0.4,vshape:0.3,eyes:0.4,nose:0.25,lips:0.7,blush:0.35,shadow:0.6,liner:0.7,brows:0.3, lipColor:'#d1005b', blushColor:'#ff5c8a', shadowColor:'#6a3fb5', linerColor:'#0b0b0b'},
 };
 const S = {};
+var slidersDirty = true;
 for (const p of PARAMS){ S[p.k]=p.d; if(p.c) S[p.c]=p.cd; }
 
 // ---------------------------------------------------------------- UI
@@ -137,6 +138,7 @@ for (const p of PARAMS){
 }
 function syncUI(){ for (const k in inputs){ const {r,v,c,p}=inputs[k]; r.value=Math.round(S[k]*100); v.textContent=r.value; if(c) c.value=S[p.c]; } syncJSON(); }
 function syncJSON(){
+  slidersDirty = true;
   const out = {}; for (const p of PARAMS){ out[p.k]=+S[p.k].toFixed(2); if(p.c) out[p.c]=S[p.c]; }
   $('json').value = JSON.stringify(out, null, 2);
 }
@@ -178,7 +180,7 @@ let landmarker = null;
 
 // ---------------------------------------------------------------- WebGL
 const canvas = $('out');
-const gl = canvas.getContext('webgl2', {preserveDrawingBuffer:true, premultipliedAlpha:false});
+const gl = canvas.getContext('webgl2', {preserveDrawingBuffer:false, premultipliedAlpha:false, powerPreference:'high-performance'});
 if (!gl){ statusEl.textContent = 'WebGL2 not supported in this browser'; throw new Error('no webgl2'); }
 
 const VS = `#version 300 es
@@ -343,10 +345,11 @@ const fctx = faceCv.getContext('2d'), mctx = makeCv.getContext('2d'), lctx = lip
 const video = $('video');
 let src=null, isVideo=false, W=0, H=0, stream=null, cachedLms=null;
 function setSource(el, vid){
-  src=el; isVideo=vid; cachedLms=null; prevPts=null;
+  src=el; isVideo=vid; cachedLms=null; prevPts=null; slidersDirty=true;
   W = vid ? el.videoWidth : el.width; H = vid ? el.videoHeight : el.height;
   canvas.width=W; canvas.height=H;
-  faceCv.width=makeCv.width=lipCv.width=Math.round(W/2); faceCv.height=makeCv.height=lipCv.height=Math.round(H/2);
+  faceCv.width=makeCv.width=Math.round(W/4); faceCv.height=makeCv.height=Math.round(H/4);
+  lipCv.width=Math.round(W/2); lipCv.height=Math.round(H/2);
   gl.bindTexture(gl.TEXTURE_2D,tMid); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,W,H,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
   gl.bindFramebuffer(gl.FRAMEBUFFER,fbo); gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tMid,0);
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
@@ -399,7 +402,9 @@ canvas.addEventListener('pointermove', e=>{ if(dragging) moveSplit(e); });
 canvas.addEventListener('pointerup', ()=> dragging=false);
 function moveSplit(e){ const r=canvas.getBoundingClientRect(); split=Math.min(.98,Math.max(.02,(e.clientX-r.left)/r.width)); }
 
-$('snap').onclick = ()=>{ canvas.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='beauty-lab-snapshot.png'; a.click(); }); };
+let wantSnap = false;
+$('snap').onclick = ()=>{ wantSnap = true; };
+function takeSnap(){ wantSnap=false; canvas.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='filter-lab-snapshot.png'; a.click(); }); }
 
 // ---------------------------------------------------------------- landmark indices (MediaPipe Face Mesh)
 const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
@@ -502,7 +507,8 @@ function drawMasks(){
     mctx.fillStyle = g2; mctx.fillRect(n[0]*s-nr, n[1]*s-nr, nr*2, nr*2);
   }
   lctx.setTransform(1,0,0,1,0,0); lctx.clearRect(0,0,lipCv.width,lipCv.height);
-  if (S.lips>0) soft(lctx, fw*0.012, hexA(S.lipColor, 0.15+S.lips*0.6), ()=>{ path(lctx,LIPS_OUT,s); path(lctx,LIPS_IN,s); }, 'fill', 'evenodd');
+  const sl = lipCv.width / W, fwl = dist(P(234),P(454))*sl;
+  if (S.lips>0) soft(lctx, fwl*0.012, hexA(S.lipColor, 0.15+S.lips*0.6), ()=>{ path(lctx,LIPS_OUT,sl); path(lctx,LIPS_IN,sl); }, 'fill', 'evenodd');
 }
 
 const warpArr = new Float32Array(48), warpR = new Float32Array(12);
@@ -522,7 +528,7 @@ function computeWarps(){
 }
 
 // ---------------------------------------------------------------- render loop
-let frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
+let shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
 function upload(t, el){ gl.bindTexture(gl.TEXTURE_2D,t); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,el); }
 function frame(now){
   requestAnimationFrame(frame);
@@ -544,11 +550,12 @@ function frame(now){
     }
   }
   const hasFace = !!(lms && lms.length >= 468);
-  if (hasFace){ updatePoints(lms); drawMasks(); computeWarps(); } else prevPts = null;
+  const fresh = hasFace && lms !== shownLms; shownLms = lms;
+  if (hasFace){ if (fresh) updatePoints(lms); if (fresh || slidersDirty) drawMasks(); computeWarps(); } else prevPts = null;
 
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
   upload(tSrc, src);
-  if (hasFace){ upload(tFace, faceCv); upload(tMake, makeCv); upload(tLip, lipCv); }
+  if (hasFace && (fresh || slidersDirty)){ upload(tFace, faceCv); upload(tMake, makeCv); upload(tLip, lipCv); slidersDirty = false; }
 
   // pass 1
   gl.bindFramebuffer(gl.FRAMEBUFFER,fbo); gl.viewport(0,0,W,H); gl.useProgram(P1.p);
@@ -574,6 +581,7 @@ function frame(now){
   gl.uniform4f(u2.uEyes,eyes[0],eyes[1],eyes[2],eyes[3]); gl.uniform1f(u2.uEyeR,eyeR); gl.uniform1f(u2.uEyeS,hasFace?eyeS:0);
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 
+  if (wantSnap) takeSnap();
   if ($('showMesh').checked && hasFace) drawMeshOverlay();
   else meshCv.style.display='none';
 
