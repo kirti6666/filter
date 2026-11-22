@@ -17,12 +17,12 @@
   .stage{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
   .view{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;min-height:0}
   #out{max-width:100%;max-height:100%;display:block;touch-action:none}
-  .tag{position:absolute;top:10px;padding:3px 8px;border-radius:6px;background:rgba(0,0,0,.55);font-size:12px;display:none}
+  .tag{z-index:2;position:absolute;top:10px;padding:3px 8px;border-radius:6px;background:rgba(0,0,0,.55);font-size:12px;display:none}
   .tag.l{left:10px}.tag.r{right:10px}
   .comparing .tag{display:block}
-  #fps{position:absolute;left:8px;bottom:6px;font-size:11px;color:#cfd3dc;background:rgba(0,0,0,.45);padding:2px 6px;border-radius:5px;font-variant-numeric:tabular-nums}
+  #fps{z-index:2;position:absolute;left:8px;bottom:6px;font-size:11px;color:#cfd3dc;background:rgba(0,0,0,.45);padding:2px 6px;border-radius:5px;font-variant-numeric:tabular-nums}
   #fps:empty{display:none}
-  #hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
+  #hint{position:absolute;inset:0;z-index:3;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
   #hint p{color:var(--muted);max-width:420px;margin:0}
   .strip{display:flex;gap:6px;overflow-x:auto;padding:8px 10px;background:var(--panel);border-top:1px solid var(--line);flex:none;scrollbar-width:none}
   .strip::-webkit-scrollbar{display:none}
@@ -49,11 +49,12 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v44</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v45</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
-      <canvas id="out" width="640" height="480"></canvas>
+      <video id="video" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:0;background:#000"></video>
+      <canvas id="out" width="640" height="480" style="position:relative;z-index:1"></canvas>
       <div class="tag l">Original</div><div class="tag r">Filtered</div>
       <div id="fps"></div>
       <div id="hint">
@@ -84,7 +85,7 @@
     <div style="display:flex;gap:8px;margin-top:8px"><button id="copy">Copy JSON</button><span id="copied" class="small" style="align-self:center"></span></div>
   </aside>
 </main>
-<video id="video" playsinline muted autoplay style="position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none;z-index:-1"></video>
+
 
 <script>
   // show any error on screen so phone-specific problems can be diagnosed from a screenshot
@@ -458,9 +459,13 @@ async function startWebcam(){
     stopStream(); video.removeAttribute('src');
     const w = 1280, h = 720;   // 720p: Full HD is too heavy for phone browsers (native app will use full quality)
     stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:w},height:{ideal:h},facingMode:facing},audio:false});
-    video.srcObject = stream; await video.play();
+    video.srcObject = stream;
+    await Promise.race([ video.play().catch(e=>showErr('play: '+e.name+' '+(e.message||''))), new Promise(r=>setTimeout(r,1500)) ]);
+    if (!video._resume){ video._resume = true; video.addEventListener('pause', ()=>{ if (stream) video.play().catch(()=>{}); }); }
     await new Promise(r=> video.videoWidth ? r() : video.addEventListener('loadedmetadata', r, {once:true}));
-    for (let i=0; i<60 && video.videoWidth < 16; i++) await new Promise(r=>setTimeout(r,50));   // Android: wait for real frames, not the 2x2 placeholder
+    for (let i=0; i<80 && video.videoWidth < 16; i++){ if (video.paused) video.play().catch(()=>{}); await new Promise(r=>setTimeout(r,50)); }   // Android: wait for real frames
+    if (video.videoWidth < 16){ const t = stream.getVideoTracks()[0], st = t ? t.getSettings() : {};
+      showErr('Camera opened but no picture yet (video '+video.videoWidth+'x'+video.videoHeight+', state '+video.readyState+', track '+(t?t.readyState:'none')+' '+(st.width||'?')+'x'+(st.height||'?')+'). Close other apps/tabs using the camera and tap Camera again.'); }
     $('mirror').checked = facing==='user'; setSource(video,true);
   }catch(e){ console.error(e); showErr('Camera: ' + e.name + ' - ' + (e.message||'') + (window.isSecureContext ? '' : ' (page not secure)')); }
 }
