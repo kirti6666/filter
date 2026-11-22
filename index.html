@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v32</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v33</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -95,6 +95,7 @@ const PARAMS = [
   {g:'Beauty',  k:'even',     l:'Even skin tone', d:0},
   {g:'Beauty',  k:'soften',   l:'Soft focus (whole frame)', d:0},
   {g:'Beauty',  k:'vibe',     l:'Healthy warm skin', d:0},
+  {g:'Beauty',  k:'hd',       l:'HD detail (face-size aware)', d:0},
   {g:'Beauty',  k:'sharp',    l:'Crisp & clear', d:0},
   {g:'Beauty',  k:'denoise',  l:'Clean background', d:0},
   {g:'Beauty',  k:'clarity',  l:'Sharp eyes & brows', d:0.25},
@@ -113,7 +114,8 @@ const PARAMS = [
 ];
 const PRESETS = {
   'Hot Days': {match:1,smooth:0.68,soften:0,brighten:0.44,vibe:1,rosy:0.75,even:0,clarity:0.25,denoise:0.35,sharp:0.6,grade:1,glow:0.2,slim:0,vshape:0,eyes:0,nose:0,lips:0.22,blush:0.45,shadow:0.05,liner:0,brows:0, lipColor:'#e88a9a', blushColor:'#f3917f', shadowColor:'#d9967a'},
-  'Off':      {sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
+  'Hot Days HD': {hd:1,match:1,smooth:0.68,soften:0,brighten:0.44,vibe:1,rosy:0.75,even:0,clarity:0.25,denoise:0.35,sharp:0.6,grade:1,glow:0.2,slim:0,vshape:0,eyes:0,nose:0,lips:0.22,blush:0.45,shadow:0.05,liner:0,brows:0, lipColor:'#e88a9a', blushColor:'#f3917f', shadowColor:'#d9967a'},
+  'Off':      {hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
   'Glam':     {smooth:0.7,brighten:0.4,rosy:0.2,clarity:0.35,slim:0.45,vshape:0.35,eyes:0.35,nose:0.3,lips:0.6,blush:0.3,shadow:0.45,liner:0.6,brows:0.35, lipColor:'#a3123a', blushColor:'#e86a7f', shadowColor:'#7a4a6e', linerColor:'#111111', browColor:'#2e2018'},
@@ -187,7 +189,7 @@ in vec2 vUV; out vec4 o;
 uniform sampler2D uSrc, uFace, uMakeup, uLips, uFeat;
 uniform highp sampler3D uLut;
 uniform vec2 uRes;
-uniform float uSmooth, uBright, uRosy, uClarity, uHasFace, uGrade, uGlow, uEven, uSoft, uMatch, uDenoise, uVibe, uSharp;
+uniform float uSmooth, uBright, uRosy, uClarity, uHasFace, uGrade, uGlow, uEven, uSoft, uMatch, uDenoise, uVibe, uSharp, uHD, uFaceRad;
 vec3 overlay(vec3 b, vec3 s){ return mix(2.*b*s, 1.-2.*(1.-b)*(1.-s), step(.5,b)); }
 float skin(vec3 c){
   float cb = 0.5 + (-0.168736*c.r - 0.331264*c.g + 0.5*c.b);
@@ -197,7 +199,8 @@ float skin(vec3 c){
 void main(){
   vec3 c = texture(uSrc, vUV).rgb;
   vec2 px = 1.0/uRes;
-  float rad = max(1.0, uRes.y*0.0055);
+  // HD: smoothing sized to the FACE (same look near or far), not to the whole picture
+  float rad = mix(max(1.0, uRes.y*0.0055), max(1.0, uFaceRad), uHD);
   float sigR = 0.06 + 0.10*uSmooth;
   vec3 sum = c, box = vec3(0.), box2 = vec3(0.); float ws = 1.0;
   for (int ring=1; ring<=3; ring++){
@@ -220,7 +223,8 @@ void main(){
   float feat = uHasFace > .5 ? texture(uFeat, vUV).a : 0.;     // eyes + brows + lips
   float sm = clamp(uSmooth*face*1.15, 0., 1.);
   vec3 res = mix(c, sum/ws, sm);
-  res += (c - box) * 0.20 * sm;                       // keep a little real skin texture
+  res += (c - box) * mix(0.20, 0.55, uHD) * sm;   // HD: keep real pore texture, remove only blotches/blemishes
+                       // keep a little real skin texture
   res += ((c - box)*1.2 + (c - box2)*0.6) * uClarity * feat;        // crisp eyes, brows, lips only
   res = mix(res, sum/ws, uDenoise * (1. - face) * (1. - feat));       // clean, grain-free background (edge-preserving)
   // fine 1-pixel crispness (no halos): full on hair/eyes/clothes/background, light on skin
@@ -599,7 +603,7 @@ function frame(now){
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,tMake);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D,tLip);
   const u1=P1.u;
-  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uFeat,5); gl.uniform1f(u1.uDenoise,S.denoise); gl.uniform1f(u1.uSharp,S.sharp); gl.uniform1f(u1.uVibe,S.vibe);
+  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uFeat,5); gl.uniform1f(u1.uDenoise,S.denoise); gl.uniform1f(u1.uHD,S.hd); gl.uniform1f(u1.uFaceRad, hasFace ? dist(P(234),P(454))*0.012 : 0); gl.uniform1f(u1.uSharp,S.sharp); gl.uniform1f(u1.uVibe,S.vibe);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, hasFace ? tFeat : tEmpty);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_3D,tLut);
   gl.uniform2f(u1.uRes,W,H); gl.uniform1f(u1.uSmooth,S.smooth); gl.uniform1f(u1.uBright,S.brighten);
