@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v45</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v46</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -390,7 +390,7 @@ let sceneLum = 128, lumFrame = 0;
 function detInput(){
   // measure scene brightness ~once a second
   if (++lumFrame % 30 === 1){ try { ltx.drawImage(src,0,0,8,8); const d = ltx.getImageData(0,0,8,8).data; let t=0; for (let i=0;i<d.length;i+=4) t += d[i]*.299+d[i+1]*.587+d[i+2]*.114; sceneLum = t/64; } catch(e){} }
-  const vw = isVideo ? video.videoWidth : src.width, vh = isVideo ? video.videoHeight : src.height;
+  const vw = src.videoWidth || src.width, vh = src.videoHeight || src.height;
   const w = 480, h = Math.round(480*vh/vw);
   if (detCv.width !== w || detCv.height !== h){ detCv.width = w; detCv.height = h; }
   dtx.globalCompositeOperation = 'source-over'; dtx.drawImage(src, 0, 0, w, h);
@@ -439,7 +439,7 @@ const video = $('video');
 let src=null, isVideo=false, W=0, H=0, vidW=0, vidH=0, procScale=1, stream=null, cachedLms=null;
 function setSource(el, vid){
   src=el; isVideo=vid; cachedLms=null; prevPts=null; slidersDirty=true;
-  vidW = vid ? el.videoWidth : el.width; vidH = vid ? el.videoHeight : el.height;
+  vidW = el.videoWidth || el.width; vidH = el.videoHeight || el.height;
   const sc = vid ? Math.min(procScale, 1600/Math.max(vidW,vidH)) : 1;
   W = Math.round(vidW*sc); H = Math.round(vidH*sc);
   segCv.width = 144; segCv.height = Math.max(64, Math.round(144*H/W)); segBuf = null; hasSeg = false;
@@ -451,21 +451,62 @@ function setSource(el, vid){
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   $('hint').style.display='none';
 }
-function stopStream(){ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } }
+function stopStream(){ stopProc(); if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } }
 let facing = 'user';
 const MOBILE = matchMedia('(pointer:coarse)').matches;
+// Camera: three strategies, tried in order, because some Android phones never feed frames to <video>
+let liveCv = null, procReader = null, camMode = '';
+function stopProc(){ if (procReader){ try{ procReader.cancel(); }catch(e){} procReader = null; } }
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function waitFrames(el, ms){ for (let t=0; t<ms && (el.videoWidth||0) < 16; t+=50){ if (el.paused) el.play().catch(()=>{}); await sleep(50); } return (el.videoWidth||0) >= 16; }
+async function attachToVideo(){
+  video.srcObject = stream; video.muted = true; video.playsInline = true;
+  await Promise.race([ video.play().catch(()=>{}), sleep(1500) ]);
+  if (!video._resume){ video._resume = true; video.addEventListener('pause', ()=>{ if (stream && src === video) video.play().catch(()=>{}); }); }
+  return waitFrames(video, 2500);
+}
+async function startProcessor(track){
+  // read camera frames directly from the track (bypasses <video>)
+  const proc = new MediaStreamTrackProcessor({ track }); procReader = proc.readable.getReader();
+  liveCv = liveCv || document.createElement('canvas'); const lc = liveCv.getContext('2d');
+  let first = true; const reader = procReader;
+  (async ()=>{
+    try {
+      while (reader === procReader){
+        const { value: f, done } = await reader.read(); if (done || !f) break;
+        const rot = ((f.rotation||0) % 360 + 360) % 360, w = f.displayWidth, h = f.displayHeight;
+        const cw = (rot===90||rot===270) ? h : w, ch = (rot===90||rot===270) ? w : h;
+        if (liveCv.width !== cw || liveCv.height !== ch){ liveCv.width = cw; liveCv.height = ch; }
+        lc.save(); lc.translate(cw/2, ch/2); lc.rotate(rot*Math.PI/180); lc.drawImage(f, -w/2, -h/2, w, h); lc.restore();
+        f.close();
+        if (first){ first = false; liveCv._ready = true; }
+      }
+    } catch(e){ showErr('frames: ' + (e.message||e)); }
+  })();
+  for (let t=0; t<2500 && !liveCv._ready; t+=50) await sleep(50);
+  return !!liveCv._ready;
+}
 async function startWebcam(){
   try{
-    stopStream(); video.removeAttribute('src');
-    const w = 1280, h = 720;   // 720p: Full HD is too heavy for phone browsers (native app will use full quality)
-    stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:w},height:{ideal:h},facingMode:facing},audio:false});
-    video.srcObject = stream;
-    await Promise.race([ video.play().catch(e=>showErr('play: '+e.name+' '+(e.message||''))), new Promise(r=>setTimeout(r,1500)) ]);
-    if (!video._resume){ video._resume = true; video.addEventListener('pause', ()=>{ if (stream) video.play().catch(()=>{}); }); }
-    await new Promise(r=> video.videoWidth ? r() : video.addEventListener('loadedmetadata', r, {once:true}));
-    for (let i=0; i<80 && video.videoWidth < 16; i++){ if (video.paused) video.play().catch(()=>{}); await new Promise(r=>setTimeout(r,50)); }   // Android: wait for real frames
-    if (video.videoWidth < 16){ const t = stream.getVideoTracks()[0], st = t ? t.getSettings() : {};
-      showErr('Camera opened but no picture yet (video '+video.videoWidth+'x'+video.videoHeight+', state '+video.readyState+', track '+(t?t.readyState:'none')+' '+(st.width||'?')+'x'+(st.height||'?')+'). Close other apps/tabs using the camera and tap Camera again.'); }
+    stopStream(); video.removeAttribute('src'); if (liveCv) liveCv._ready = false;
+    statusEl.textContent = 'Starting camera…';
+    // 1) normal: 720p into the video element
+    stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:facing},audio:false});
+    let ok = await attachToVideo(); camMode = 'video';
+    // 2) simpler request + reset player
+    if (!ok){
+      stopStream(); video.srcObject = null; video.load();
+      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:facing},audio:false});
+      ok = await attachToVideo(); camMode = 'video-basic';
+    }
+    // 3) direct frame access (Chrome)
+    if (!ok && 'MediaStreamTrackProcessor' in window){
+      const track = stream.getVideoTracks()[0];
+      if (await startProcessor(track)){ camMode = 'direct-frames'; $('mirror').checked = facing==='user'; setSource(liveCv, true); statusEl.textContent = 'Camera on (direct frames)'; return; }
+    }
+    if (!ok){ const t = stream && stream.getVideoTracks()[0], st = t ? t.getSettings() : {};
+      showErr('Camera gives no picture on this phone (player '+video.videoWidth+'x'+video.videoHeight+', state '+video.readyState+', track '+(t?t.readyState:'none')+' '+(st.width||'?')+'x'+(st.height||'?')+', direct frames '+('MediaStreamTrackProcessor' in window ? 'tried' : 'not supported')+'). Try updating Chrome.'); return; }
+    statusEl.textContent = 'Camera on' + (camMode==='video-basic' ? ' (basic mode)' : '');
     $('mirror').checked = facing==='user'; setSource(video,true);
   }catch(e){ console.error(e); showErr('Camera: ' + e.name + ' - ' + (e.message||'') + (window.isSecureContext ? '' : ' (page not secure)')); }
 }
@@ -661,8 +702,9 @@ function upload(t, el){ gl.bindTexture(gl.TEXTURE_2D,t); gl.texImage2D(gl.TEXTUR
 function frame(now){
   requestAnimationFrame(frame);
   if (!src || W===0) return;
-  if (isVideo && (video.readyState < 2 || video.videoWidth < 16)) return;
-  if (isVideo && (video.videoWidth!==vidW || video.videoHeight!==vidH) && video.videoWidth) setSource(video,true);
+  if (isVideo && src === video && (video.readyState < 2 || video.videoWidth < 16)) return;
+  if (isVideo && src === video && (video.videoWidth!==vidW || video.videoHeight!==vidH) && video.videoWidth) setSource(video,true);
+  if (isVideo && liveCv && src === liveCv && (liveCv.width!==vidW || liveCv.height!==vidH)) setSource(liveCv,true);
 
   let lms = null;
   if (landmarker){
@@ -727,7 +769,7 @@ function frame(now){
 
   frames++;
   if (isVideo && now - fpsT > 500 && frames*1000/(now-fpsT) < 22){ slowCount = (slowCount||0) + 1;
-    if (slowCount >= 4 && procScale > 0.7){ procScale = Math.max(0.67, procScale - 0.17); slowCount = 0; setSource(video, true); } }
+    if (slowCount >= 4 && procScale > 0.7){ procScale = Math.max(0.67, procScale - 0.17); slowCount = 0; setSource(src, true); } }
   else if (now - fpsT > 500) slowCount = 0;
   if (now - fpsT > 500){ lastFps = frames*1000/(now-fpsT); $('fps').textContent = `${(frames*1000/(now-fpsT)).toFixed(0)} fps · face ${hasFace?'✓':'—'} · detect ${detMs.toFixed(1)} ms · ${W}×${H}`; frames=0; fpsT=now; }
 }
