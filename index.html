@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v49</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v50</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -178,8 +178,11 @@ $('copy').onclick = async ()=>{ try{ await navigator.clipboard.writeText($('json
 
 // ---------------------------------------------------------------- background face tracker (worker)
 let worker = null, workerReady = false, workerBusy = false, workerLms = null, workerLmsTs = 0, workerMode = '';
+let workerTried = false, workerFailed = false, workerStartT = 0, workerSentT = 0, workerOkSince = 0;
+function workerFail(why){ if (workerFailed) return; workerFailed = true; workerReady = false; try{ worker && worker.terminate(); }catch(e){} worker = null; console.warn('background tracker off:', why); statusEl.textContent = 'Normal tracking'; ensureMainLandmarker(); }
 function startWorker(){
-  if (worker || !window.Worker) return;
+  if (worker || workerTried || workerFailed || !window.Worker) return;
+  workerTried = true; workerStartT = performance.now();
   const code = `
     const V='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
     const MODEL='https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
@@ -210,40 +213,46 @@ function startWorker(){
   worker = new Worker(URL.createObjectURL(new Blob([code], { type:'text/javascript' })));
   worker.onmessage = (e)=>{ const d = e.data;
     if (d.type === 'ready'){ workerReady = true; workerMode = d.mode; statusEl.textContent = 'Background tracker ready (' + d.mode + ')'; }
-    else if (d.type === 'result'){ workerBusy = false; workerLms = d.lms; workerLmsTs = d.ts; detMs = detMs*0.8 + d.ms*0.2; workerMode = d.mode; }
+    else if (d.type === 'result'){ workerBusy = false; if (!workerOkSince) workerOkSince = performance.now(); workerLms = d.lms; workerLmsTs = d.ts; detMs = detMs*0.8 + d.ms*0.2; workerMode = d.mode; }
     else if (d.type === 'err'){ workerBusy = false; console.warn('tracker', d.msg); }
   };
-  worker.onerror = (e)=>{ showErr('background tracker: ' + (e.message||'failed') + ' (using normal tracking)'); worker = null; workerReady = false; };
+  worker.onerror = (e)=>{ try{ e.preventDefault(); }catch(_){} workerFail(e.message || 'error'); };
   worker.postMessage({ type:'init' });
 }
 // ---------------------------------------------------------------- face model
 const statusEl = $('status');
-let landmarker = null, segmenter = null;
-(async ()=>{
-  try{
-    const V = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
-    const { FaceLandmarker, FilesetResolver, ImageSegmenter } = await import(V + '/vision_bundle.mjs');
-    const fileset = await FilesetResolver.forVisionTasks(V + '/wasm');
-    const opts = (delegate)=>({ baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate }, runningMode:'VIDEO', numFaces:1, minFaceDetectionConfidence:0.35, minFacePresenceConfidence:0.35, minTrackingConfidence:0.35 });
-    try { landmarker = await FaceLandmarker.createFromOptions(fileset, opts('GPU')); }
-    catch { landmarker = await FaceLandmarker.createFromOptions(fileset, opts('CPU')); }
-    statusEl.textContent = 'Face model ready';
-    // per-pixel skin detection (face skin + body skin) — Google's free multi-class selfie model
-    try {
-      const so = (delegate)=>({ baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite', delegate },
-                               runningMode:'VIDEO', outputConfidenceMasks:true, outputCategoryMask:false });
-      try { segmenter = await ImageSegmenter.createFromOptions(fileset, so('GPU')); }
-      catch { segmenter = await ImageSegmenter.createFromOptions(fileset, so('CPU')); }
-      statusEl.textContent = 'Face + skin models ready';
-    } catch(e){ console.warn('skin model unavailable', e); }
-  }catch(e){
-    console.error(e);
-    statusEl.textContent = 'Face model failed to load (check internet). Skin filters still work.';
-  }
-})();
+let landmarker = null, segmenter = null, MP = null, fileset = null, mainLoading = false, segLoading = false;
+const MPV = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+async function mpBase(){ if (!MP){ MP = await import(MPV + '/vision_bundle.mjs'); fileset = await MP.FilesetResolver.forVisionTasks(MPV + '/wasm'); } }
+async function ensureMainLandmarker(){
+  if (landmarker || mainLoading) return; mainLoading = true;
+  try { await mpBase();
+    const opts = (delegate)=>({ baseOptions:{ modelAssetPath: FACE_MODEL, delegate }, runningMode:'VIDEO', numFaces:1, minFaceDetectionConfidence:0.35, minFacePresenceConfidence:0.35, minTrackingConfidence:0.35 });
+    try { landmarker = await MP.FaceLandmarker.createFromOptions(fileset, opts('GPU')); }
+    catch { landmarker = await MP.FaceLandmarker.createFromOptions(fileset, opts('CPU')); }
+    if (!workerReady) statusEl.textContent = 'Face model ready';
+  } catch(e){ console.error(e); statusEl.textContent = 'Face model failed to load (check internet). Skin filters still work.'; }
+  mainLoading = false;
+}
+async function ensureSegmenter(){
+  if (segmenter || segLoading) return; segLoading = true;
+  try { await mpBase();
+    const so = (delegate)=>({ baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite', delegate },
+                             runningMode:'VIDEO', outputConfidenceMasks:true, outputCategoryMask:false });
+    try { segmenter = await MP.ImageSegmenter.createFromOptions(fileset, so('GPU')); }
+    catch { segmenter = await MP.ImageSegmenter.createFromOptions(fileset, so('CPU')); }
+    statusEl.textContent = 'Skin model ready';
+  } catch(e){ console.warn('skin model unavailable', e); }
+  segLoading = false;
+}
+ensureMainLandmarker();
 
 // ---------------------------------------------------------------- WebGL
 const canvas = $('out');
+canvas.addEventListener('webglcontextlost', (e)=>{ e.preventDefault(); let n=0; try{ n=+(sessionStorage.getItem('glreload')||0); }catch(_){}
+  if (n < 2){ try{ sessionStorage.setItem('glreload', n+1); }catch(_){} statusEl.textContent = 'Graphics reset, reloading…'; setTimeout(()=>location.reload(), 400); }
+  else showErr('Graphics memory full on this phone. Close other apps/tabs and reload.'); });
 const gl = canvas.getContext('webgl2', {preserveDrawingBuffer:false, premultipliedAlpha:false, powerPreference:'high-performance'});
 if (!gl){ statusEl.textContent = 'WebGL2 not supported in this browser'; throw new Error('no webgl2'); }
 
@@ -447,6 +456,7 @@ function detInput(){
 const segCv = document.createElement('canvas'), sgx = segCv.getContext('2d', { willReadFrequently: false });
 let segBuf = null, hasSeg = false, segTs = 0;
 function runSegmentation(now){
+  if (S.skinAI > 0 && !segmenter) ensureSegmenter();
   if (!segmenter || !src || !(S.skinAI > 0)) return;   // optional (off by default)
   try {
     sgx.drawImage(src, 0, 0, segCv.width, segCv.height);
@@ -753,22 +763,30 @@ function computeWarps(){
 }
 
 // ---------------------------------------------------------------- render loop
-let lastFps=30, slowCount=0, lastGood=null, missCount=0, shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
+let lastDrawT=0, lastFps=30, slowCount=0, lastGood=null, missCount=0, shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
 function upload(t, el){ gl.bindTexture(gl.TEXTURE_2D,t); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,el); }
 function frame(now){
   requestAnimationFrame(frame);
+  try { frameBody(now); } catch(e){ if (!frame._err){ frame._err = 1; showErr('frame: ' + (e && e.message || e)); } }
+}
+function frameBody(now){
   if (!src || W===0) return;
   if (isVideo && src === video && (video.readyState < 2 || video.videoWidth < 16)) return;
   if (isVideo && src === video && (video.videoWidth!==vidW || video.videoHeight!==vidH) && video.videoWidth) setSource(video,true);
   if (isVideo && liveCv && src === liveCv && (liveCv.width!==vidW || liveCv.height!==vidH)) setSource(liveCv,true);
-  if (isVideo && (rvfcOn || src === liveCv) && !newVF && !slidersDirty && !wantSnap) return;   // same camera frame: nothing new to process
+  if (isVideo && rvfcOn && lastDrawT && now - lastDrawT > 1200){ rvfcOn = false; console.warn('frame signal stalled: drawing every refresh'); }
+  if (isVideo && (rvfcOn || src === liveCv) && !newVF && !slidersDirty && !wantSnap && !(lastDrawT && now - lastDrawT > 1200)) return;   // same camera frame: nothing new to process
   newVF = false;
 
   let lms = null;
-  const useWorker = S.worker > 0 && isVideo && workerReady && worker;
-  if (S.worker > 0 && !worker) startWorker();
+  if (S.worker > 0 && !workerTried) startWorker();
+  if (worker && !workerReady && now - workerStartT > 20000) workerFail('slow start');
+  if (worker && workerBusy && workerSentT && now - workerSentT > 3000) workerFail('no answer');
+  const useWorker = S.worker > 0 && isVideo && workerReady && !!worker;
+  if (!useWorker && !landmarker) ensureMainLandmarker();
+  if (useWorker && landmarker && workerOkSince && now - workerOkSince > 4000){ try{ landmarker.close(); }catch(e){} landmarker = null; }   // free memory: background tracker is working
   if (useWorker){
-    if (!workerBusy){ workerBusy = true; const capTs = now;
+    if (!workerBusy){ workerBusy = true; workerSentT = now; const capTs = now;
       createImageBitmap(detInput()).then(bm => worker.postMessage({ type:'frame', bm, ts: capTs }, [bm])).catch(()=>{ workerBusy = false; }); }
     lms = workerLms;
   } else if (landmarker){
@@ -829,6 +847,7 @@ function frame(now){
   gl.uniform4f(u2.uEyes,eyes[0],eyes[1],eyes[2],eyes[3]); gl.uniform1f(u2.uEyeR,eyeR); gl.uniform1f(u2.uEyeS,hasFace?eyeS:0);
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 
+  lastDrawT = now;
   if (wantSnap) takeSnap();
   if ($('showMesh').checked && hasFace) drawMeshOverlay();
   else meshCv.style.display='none';
