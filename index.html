@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v51</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v52</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -183,13 +183,12 @@ let worker = null, workerReady = false, workerBusy = false, workerLms = null, wo
 let workerTried = false, workerFailed = false, workerStartT = 0, workerSentT = 0, workerOkSince = 0;
 function workerFail(why){ if (workerFailed) return; workerFailed = true; workerReady = false; try{ worker && worker.terminate(); }catch(e){} worker = null; console.warn('background tracker off:', why); statusEl.textContent = 'Normal tracking (' + why + ')'; ensureMainLandmarker(); }
 function startWorker(){
-  if (worker || workerTried || workerFailed || !window.Worker) return;
+  if (worker || workerTried || workerFailed || !window.Worker || typeof MPV === 'undefined') return;
   workerTried = true; workerStartT = performance.now();
   const code = `
     const V='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
     const MODEL='https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
-    self.exports = {}; importScripts(V + '/vision_bundle.cjs');
-    const { FaceLandmarker, FilesetResolver } = self.exports;
+    let FaceLandmarker = null, FilesetResolver = null;
     let fs=null, lm=null, mode='', lastTs=0, times=[], phase=0, prev=null, prevAvg=0;
     async function make(d){ fs = fs || await FilesetResolver.forVisionTasks(V + '/wasm');
       return FaceLandmarker.createFromOptions(fs, { baseOptions:{ modelAssetPath: MODEL, delegate: d }, runningMode:'VIDEO', numFaces:1,
@@ -197,7 +196,8 @@ function startWorker(){
     const avg = a => a.reduce((x,y)=>x+y,0)/a.length;
     const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
     onmessage = async (e) => { const d = e.data;
-      if (d.type === 'init'){ try { lm = await withTimeout(make('GPU'), 15000); mode='GPU'; } catch(err){ lm = await make('CPU'); mode='CPU'; } postMessage({ type:'ready', mode }); return; }
+      if (d.type === 'init'){ self.exports = {}; (0, eval)(d.code); ({ FaceLandmarker, FilesetResolver } = self.exports);   // run the tracker code passed in as text
+        try { lm = await withTimeout(make('GPU'), 15000); mode='GPU'; } catch(err){ lm = await make('CPU'); mode='CPU'; } postMessage({ type:'ready', mode }); return; }
       if (d.type === 'frame'){
         const t0 = performance.now(); let out = null;
         try { const ts = Math.max(d.ts, lastTs+1); lastTs = ts; const r = lm.detectForVideo(d.bm, ts);
@@ -220,7 +220,10 @@ function startWorker(){
     else if (d.type === 'err'){ workerBusy = false; console.warn('tracker', d.msg); }
   };
   worker.onerror = (e)=>{ try{ e.preventDefault(); }catch(_){} workerFail(e.message || 'error'); };
-  worker.postMessage({ type:'init' });
+  // fetch the tracker code here and give it to the worker as a proper script
+  fetch(MPV + '/vision_bundle.cjs').then(r => { if (!r.ok) throw new Error('bundle HTTP ' + r.status); return r.text(); })
+    .then(txt => { if (worker) worker.postMessage({ type:'init', code: txt }); })
+    .catch(e => workerFail('download: ' + (e.message || e)));
 }
 // ---------------------------------------------------------------- face model
 const statusEl = $('status');
@@ -232,8 +235,8 @@ async function ensureMainLandmarker(){
   if (landmarker || mainLoading) return; mainLoading = true;
   try { await mpBase();
     const opts = (delegate)=>({ baseOptions:{ modelAssetPath: FACE_MODEL, delegate }, runningMode:'VIDEO', numFaces:1, minFaceDetectionConfidence:0.35, minFacePresenceConfidence:0.35, minTrackingConfidence:0.35 });
-    try { landmarker = await MP.FaceLandmarker.createFromOptions(fileset, opts('GPU')); }
-    catch { landmarker = await MP.FaceLandmarker.createFromOptions(fileset, opts('CPU')); }
+    try { landmarker = await MP.FaceLandmarker.createFromOptions(fileset, opts('GPU')); bench.mode = 'GPU'; }
+    catch { landmarker = await MP.FaceLandmarker.createFromOptions(fileset, opts('CPU')); bench.mode = 'CPU'; }
     if (!workerReady) statusEl.textContent = 'Face model ready';
   } catch(e){ console.error(e); statusEl.textContent = 'Face model failed to load (check internet). Skin filters still work.'; }
   mainLoading = false;
@@ -817,7 +820,7 @@ function frameBody(now){
   } else if (landmarker){
     frameNo++;
     if (!isVideo && cachedLms) lms = cachedLms;
-    else if (MOBILE && isVideo && lastLms && frameNo % 2 && !(S.trackEvery >= 1 || (S.trackEvery > 0 && lastFps > 23))){ lms = lastLms; if (frameNo % 6 === 1) runSegmentation(now); }   // phones: skin model ~5x/sec, between face detections
+    else if (MOBILE && isVideo && lastLms && (frameNo % (detMs > 90 ? 4 : detMs > 55 ? 3 : 2)) && !(S.trackEvery >= 1 || (S.trackEvery > 0 && lastFps > 23 && detMs < 40))){ lms = lastLms; if (frameNo % 6 === 1) runSegmentation(now); }   // phones: skin model ~5x/sec, between face detections
     else {
       const t0 = performance.now(), ts = Math.max(now, lastTs+1); lastTs = ts;
       try { const r = landmarker.detectForVideo(detInput(), ts); lms = r.faceLandmarks && r.faceLandmarks[0]; } catch(e){ console.warn(e); }
