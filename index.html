@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v50</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v51</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -105,6 +105,8 @@ const PARAMS = [
   {g:'Beauty',  k:'soften',   l:'Soft focus (whole frame)', d:0},
   {g:'Beauty',  k:'vibe',     l:'Healthy warm skin', d:0},
   {g:'Beauty',  k:'worker',   l:'Background tracking (smooth video)', d:0},
+  {g:'Look',    k:'expo',     l:'Camera brightness fix (Android)', d:0},
+  {g:'Look',    k:'camSat',   l:'Camera color fix (Android)', d:0},
   {g:'Look',    k:'lutSel',   l:'Android color match', d:0},
   {g:'Beauty',  k:'scale',    l:'Processing resolution (Android: 75)', d:0},
   {g:'Beauty',  k:'lite',     l:'Lite mode (faster phones/Android)', d:0},
@@ -134,8 +136,8 @@ const PRESETS = {
   'Hot Days': {smooth:0.9,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:1,denoise:1,clarity:0.25,grade:1,match:1,glow:0.17,slim:0,vshape:0.13,eyes:0,nose:0.04,lips:0.23,lipColor:'#e88a9a',lipShade:0.61,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
   'Hot Days 2': {smooth:0.7,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0.17,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipDetail:1,noseTip:0.6,lipColor:'#b84e60',lipShade:0,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
   'Hot Days 3': {smooth:0.7,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,trackEvery:1,skinAI:0,hd:1,sharp:1,denoise:1,clarity:0.1,grade:1,match:1,glow:0.17,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipColor:'#b84e60',lipShade:0,lipDetail:1,noseTip:0.35,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
-  'Hot Days Android': {worker:1,lutSel:1,lite:1,scale:0.75,smooth:0.6,brighten:0.6,rosy:0.8,even:0,soften:0,vibe:1,trackEvery:0.5,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.6,lipColor:'#a84a48',lipShade:0,lipDetail:1,noseTip:0.5,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
-  'Off':      {worker:0,lutSel:0,scale:0,lite:0,trackEvery:0,lipDetail:0,noseTip:0,lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
+  'Hot Days Android': {worker:1,lutSel:0,expo:0.72,camSat:0.41,lite:1,scale:0.75,smooth:0.75,brighten:0.6,rosy:0.8,even:0,soften:0,vibe:1,trackEvery:0.5,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipColor:'#b84e60',lipShade:0,lipDetail:1,noseTip:0.35,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
+  'Off':      {expo:0,camSat:0,worker:0,lutSel:0,scale:0,lite:0,trackEvery:0,lipDetail:0,noseTip:0,lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
   'Glam':     {smooth:0.7,brighten:0.4,rosy:0.2,clarity:0.35,slim:0.45,vshape:0.35,eyes:0.35,nose:0.3,lips:0.6,blush:0.3,shadow:0.45,liner:0.6,brows:0.35, lipColor:'#a3123a', blushColor:'#e86a7f', shadowColor:'#7a4a6e', linerColor:'#111111', browColor:'#2e2018'},
@@ -179,7 +181,7 @@ $('copy').onclick = async ()=>{ try{ await navigator.clipboard.writeText($('json
 // ---------------------------------------------------------------- background face tracker (worker)
 let worker = null, workerReady = false, workerBusy = false, workerLms = null, workerLmsTs = 0, workerMode = '';
 let workerTried = false, workerFailed = false, workerStartT = 0, workerSentT = 0, workerOkSince = 0;
-function workerFail(why){ if (workerFailed) return; workerFailed = true; workerReady = false; try{ worker && worker.terminate(); }catch(e){} worker = null; console.warn('background tracker off:', why); statusEl.textContent = 'Normal tracking'; ensureMainLandmarker(); }
+function workerFail(why){ if (workerFailed) return; workerFailed = true; workerReady = false; try{ worker && worker.terminate(); }catch(e){} worker = null; console.warn('background tracker off:', why); statusEl.textContent = 'Normal tracking (' + why + ')'; ensureMainLandmarker(); }
 function startWorker(){
   if (worker || workerTried || workerFailed || !window.Worker) return;
   workerTried = true; workerStartT = performance.now();
@@ -193,8 +195,9 @@ function startWorker(){
       return FaceLandmarker.createFromOptions(fs, { baseOptions:{ modelAssetPath: MODEL, delegate: d }, runningMode:'VIDEO', numFaces:1,
         minFaceDetectionConfidence:0.35, minFacePresenceConfidence:0.35, minTrackingConfidence:0.35 }); }
     const avg = a => a.reduce((x,y)=>x+y,0)/a.length;
+    const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
     onmessage = async (e) => { const d = e.data;
-      if (d.type === 'init'){ try { lm = await make('GPU'); mode='GPU'; } catch(err){ lm = await make('CPU'); mode='CPU'; } postMessage({ type:'ready', mode }); return; }
+      if (d.type === 'init'){ try { lm = await withTimeout(make('GPU'), 15000); mode='GPU'; } catch(err){ lm = await make('CPU'); mode='CPU'; } postMessage({ type:'ready', mode }); return; }
       if (d.type === 'frame'){
         const t0 = performance.now(); let out = null;
         try { const ts = Math.max(d.ts, lastTs+1); lastTs = ts; const r = lm.detectForVideo(d.bm, ts);
@@ -247,6 +250,27 @@ async function ensureSegmenter(){
   segLoading = false;
 }
 ensureMainLandmarker();
+// main-page engine benchmark: if face tracking is slow (> 40 ms), try the other engine once and keep the faster
+let bench = { phase:0, times:[], prev:null, prevAvg:0, mode:'GPU', busy:false };
+async function benchMain(ms){
+  if (bench.phase === 2 || bench.busy || !landmarker) return;
+  bench.times.push(ms); if (bench.times.length < 20) return;
+  const avg = bench.times.reduce((a,b)=>a+b,0)/bench.times.length; bench.times = [];
+  if (bench.phase === 0){
+    if (avg <= 40){ bench.phase = 2; return; }
+    bench.busy = true; bench.prevAvg = avg;
+    try { await mpBase(); const other = bench.mode === 'GPU' ? 'CPU' : 'GPU';
+      const lm2 = await MP.FaceLandmarker.createFromOptions(fileset, { baseOptions:{ modelAssetPath: FACE_MODEL, delegate: other }, runningMode:'VIDEO', numFaces:1, minFaceDetectionConfidence:0.35, minFacePresenceConfidence:0.35, minTrackingConfidence:0.35 });
+      bench.prev = { lm: landmarker, mode: bench.mode }; landmarker = lm2; bench.mode = other; bench.phase = 1;
+    } catch(e){ bench.phase = 2; }
+    bench.busy = false;
+  } else if (bench.phase === 1){
+    bench.phase = 2;
+    if (avg >= bench.prevAvg){ try{ landmarker.close(); }catch(e){} landmarker = bench.prev.lm; bench.mode = bench.prev.mode; }
+    else { try{ bench.prev.lm.close(); }catch(e){} }
+    bench.prev = null;
+  }
+}
 
 // ---------------------------------------------------------------- WebGL
 const canvas = $('out');
@@ -268,7 +292,7 @@ uniform sampler2D uSrc, uFace, uMakeup, uLips, uFeat, uSeg;
 uniform float uHasSeg;
 uniform vec2 uOv;   // predicted face movement since the overlays were drawn (keeps lipstick glued while moving)
 uniform highp sampler3D uLut, uLut2;
-uniform float uLutSel;
+uniform float uLutSel, uExpo, uCamSat;   // camera correction (Android cameras capture darker)
 uniform vec2 uRes;
 uniform float uSmooth, uBright, uRosy, uClarity, uHasFace, uGrade, uGlow, uEven, uSoft, uMatch, uDenoise, uVibe, uSharp, uHD, uFaceRad;
 uniform int uRings;   // 3 = full quality, 2 = lite (Android / slower GPUs)
@@ -372,6 +396,7 @@ void main(){
     // Snapchat Hot Days colour match: 17^3 colour lookup table fitted pixel-by-pixel on aligned
     // side-by-side screenshots, smoothed, neutral outside the scene colours, safe for all skin tones
     vec3 q = clamp(res,0.,1.);
+    if (uExpo != 1. || uCamSat != 1.){ q = pow(q, vec3(uExpo)); float ql = dot(q, vec3(.299,.587,.114)); q = clamp(mix(vec3(ql), q, uCamSat), 0., 1.); }
     vec3 lq = q*(16./17.) + 0.5/17.;
     vec3 sm2 = uLutSel > .5 ? texture(uLut2, lq).rgb : texture(uLut, lq).rgb;
     res = mix(res, clamp(sm2,0.,1.), uMatch);
@@ -445,7 +470,7 @@ function detInput(){
   // measure scene brightness ~once a second
   if (++lumFrame % 30 === 1){ try { ltx.drawImage(src,0,0,8,8); const d = ltx.getImageData(0,0,8,8).data; let t=0; for (let i=0;i<d.length;i+=4) t += d[i]*.299+d[i+1]*.587+d[i+2]*.114; sceneLum = t/64; } catch(e){} }
   const vw = src.videoWidth || src.width, vh = src.videoHeight || src.height;
-  const w = S.lite > 0 ? 320 : 480, h = Math.round(w*vh/vw);
+  const w = S.lite > 0 ? 256 : 480, h = Math.round(w*vh/vw);
   if (detCv.width !== w || detCv.height !== h){ detCv.width = w; detCv.height = h; }
   dtx.globalCompositeOperation = 'source-over'; dtx.drawImage(src, 0, 0, w, h);
   if (sceneLum < 95){ dtx.globalCompositeOperation = 'screen'; dtx.drawImage(src, 0, 0, w, h);        // low light: lift shadows for the tracker
@@ -780,8 +805,8 @@ function frameBody(now){
 
   let lms = null;
   if (S.worker > 0 && !workerTried) startWorker();
-  if (worker && !workerReady && now - workerStartT > 20000) workerFail('slow start');
-  if (worker && workerBusy && workerSentT && now - workerSentT > 3000) workerFail('no answer');
+  if (worker && !workerReady && now - workerStartT > 45000) workerFail('slow start');
+  if (worker && workerBusy && workerSentT && now - workerSentT > 6000) workerFail('no answer');
   const useWorker = S.worker > 0 && isVideo && workerReady && !!worker;
   if (!useWorker && !landmarker) ensureMainLandmarker();
   if (useWorker && landmarker && workerOkSince && now - workerOkSince > 4000){ try{ landmarker.close(); }catch(e){} landmarker = null; }   // free memory: background tracker is working
@@ -796,7 +821,8 @@ function frameBody(now){
     else {
       const t0 = performance.now(), ts = Math.max(now, lastTs+1); lastTs = ts;
       try { const r = landmarker.detectForVideo(detInput(), ts); lms = r.faceLandmarks && r.faceLandmarks[0]; } catch(e){ console.warn(e); }
-      detMs = detMs*0.9 + (performance.now()-t0)*0.1;
+      const dt0 = performance.now()-t0; detMs = detMs*0.9 + dt0*0.1;
+      benchMain(dt0);
       if (!isVideo) cachedLms = lms || null;
       lastLms = lms || null;
       if ((!MOBILE || !isVideo) && frameNo % 3 === 0) runSegmentation(now);
@@ -826,7 +852,7 @@ function frameBody(now){
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,tMake);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D,tLip);
   const u1=P1.u;
-  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uLut2,7); gl.uniform1f(u1.uLutSel, S.lutSel||0);
+  gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uLut2,7); gl.uniform1f(u1.uLutSel, S.lutSel||0); gl.uniform1f(u1.uExpo, 1. - 0.5*(S.expo||0)); gl.uniform1f(u1.uCamSat, 1. + 0.4*(S.camSat||0));
   gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_3D,tLut2); gl.uniform1i(u1.uFeat,5); gl.uniform1i(u1.uRings, S.lite > 0 ? 2 : 3); gl.uniform2f(u1.uOv, ovx, ovy); gl.uniform1i(u1.uSeg,6); gl.uniform1f(u1.uHasSeg, (hasSeg && S.skinAI > 0) ? 1 : 0);
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, tSeg); gl.uniform1f(u1.uDenoise,S.denoise); gl.uniform1f(u1.uHD,S.hd); gl.uniform1f(u1.uFaceRad, hasFace ? dist(P(234),P(454))*0.012 : 0); gl.uniform1f(u1.uSharp,S.sharp); gl.uniform1f(u1.uVibe,S.vibe);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, hasFace ? tFeat : tEmpty);
@@ -856,7 +882,7 @@ function frameBody(now){
   if (isVideo && now - fpsT > 500 && frames*1000/(now-fpsT) < 17){ slowCount = (slowCount||0) + 1;
     if (slowCount >= 4 && procScale > 0.7){ procScale = Math.max(0.67, procScale - 0.17); slowCount = 0; setSource(src, true); } }
   else if (now - fpsT > 500) slowCount = 0;
-  if (now - fpsT > 500){ lastFps = frames*1000/(now-fpsT); $('fps').textContent = `${(frames*1000/(now-fpsT)).toFixed(0)} fps · face ${hasFace?'✓':'—'} · detect ${detMs.toFixed(1)} ms${useWorker?' (bg '+workerMode+')':''} · ${W}×${H}`; frames=0; fpsT=now; }
+  if (now - fpsT > 500){ lastFps = frames*1000/(now-fpsT); $('fps').textContent = `${(frames*1000/(now-fpsT)).toFixed(0)} fps · face ${hasFace?'✓':'—'} · detect ${detMs.toFixed(1)} ms${useWorker?' (bg '+workerMode+')':' ('+bench.mode+')'} · ${W}×${H}`; frames=0; fpsT=now; }
 }
 
 // landmark overlay (debug)
