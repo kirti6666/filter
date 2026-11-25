@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v55</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v56</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -137,7 +137,7 @@ const PRESETS = {
   'Hot Days': {smooth:0.9,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:1,denoise:1,clarity:0.25,grade:1,match:1,glow:0.17,slim:0,vshape:0.13,eyes:0,nose:0.04,lips:0.23,lipColor:'#e88a9a',lipShade:0.61,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
   'Hot Days 2': {smooth:0.7,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0.17,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipDetail:1,noseTip:0.6,lipColor:'#b84e60',lipShade:0,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
   'Hot Days 3': {smooth:0.7,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,trackEvery:1,skinAI:0,hd:1,sharp:1,denoise:1,clarity:0.1,grade:1,match:1,glow:0.17,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipColor:'#b84e60',lipShade:0,lipDetail:1,noseTip:0.35,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
-  'Hot Days Android': {flow:1,worker:1,lutSel:0,expo:0.72,camSat:0.41,lite:1,scale:0.75,smooth:0.75,brighten:0.6,rosy:0.8,even:0,soften:0,vibe:1,trackEvery:0.5,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipColor:'#b84e60',lipShade:0,lipDetail:1,noseTip:0.35,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
+  'Hot Days Android': {flow:1,worker:1,lutSel:0,expo:0.72,camSat:0.41,lite:1,scale:0.75,smooth:0.75,brighten:0.6,rosy:0.8,even:0,soften:0,vibe:1,trackEvery:0.5,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipColor:'#b84e60',lipShade:0,lipDetail:1,noseTip:0.2,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
   'Off':      {flow:0,expo:0,camSat:0,worker:0,lutSel:0,scale:0,lite:0,trackEvery:0,lipDetail:0,noseTip:0,lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
@@ -320,6 +320,7 @@ in vec2 vUV; out vec4 o;
 uniform sampler2D uSrc, uFace, uMakeup, uLips, uFeat, uSeg;
 uniform float uHasSeg;
 uniform vec2 uOv;   // predicted face movement since the overlays were drawn (keeps lipstick glued while moving)
+uniform vec2 uOvCur, uOvRef; uniform mat2 uOvMi; uniform float uOvAff, uMkFade;
 uniform highp sampler3D uLut, uLut2;
 uniform float uLutSel, uExpo, uCamSat;   // camera correction (Android cameras capture darker)
 uniform vec2 uRes;
@@ -331,6 +332,7 @@ float skin(vec3 c){
   float cr = 0.5 + ( 0.5*c.r - 0.418688*c.g - 0.081312*c.b);
   return smoothstep(.27,.34,cb)*(1.-smoothstep(.48,.55,cb))*smoothstep(.50,.56,cr)*(1.-smoothstep(.66,.73,cr));
 }
+vec2 ovUV(vec2 uv){ vec2 r = (uOvRef + uOvMi*(uv*uRes - uOvCur)) / uRes; return mix(uv - uOv, r, uOvAff); }
 void main(){
   vec3 c = texture(uSrc, vUV).rgb;
   vec2 px = 1.0/uRes;
@@ -355,8 +357,8 @@ void main(){
   box /= 12.; box2 /= 12.;
   // skin decision from a neighbourhood average (not single pixels): smooth, no patches, no flicker
   float sk = skin(mix(box, box2, .5));
-  float face = uHasFace > .5 ? max(texture(uFace, vUV - uOv).a, sk*0.85) : sk*.85;
-  float feat = uHasFace > .5 ? texture(uFeat, vUV - uOv).a : 0.;     // eyes + brows + lips
+  float face = uHasFace > .5 ? max(texture(uFace, ovUV(vUV)).a, sk*0.85) : sk*.85;
+  float feat = uHasFace > .5 ? texture(uFeat, ovUV(vUV)).a : 0.;     // eyes + brows + lips
   if (uHasSeg > .5) face = smoothstep(.25, .75, texture(uSeg, vUV).r) * (1. - feat);   // exact skin, pixel by pixel
   float sm = clamp(uSmooth*face*1.15, 0., 1.);
   vec3 res = mix(c, sum/ws, sm);
@@ -384,7 +386,7 @@ void main(){
       res *= mix(1., clamp((wl/wsum)/l, .88, 1.18), uEven*face*.5);
     }
   }
-  vec4 lp = texture(uLips, vUV - uOv);
+  vec4 lp = texture(uLips, ovUV(vUV)); lp.a *= uMkFade;
   if (lp.a > .002){
     vec3 base = clamp(res,0.,1.);
     vec3 bl = mix(overlay(base, lp.rgb), base*lp.rgb*1.15, .35);
@@ -412,7 +414,7 @@ void main(){
     vec3 target = vec3(res.r, res.r*0.74, res.r*0.61);
     res = mix(res, target, clamp(uRosy*face*0.6, 0., 1.));
   }
-  vec4 m = texture(uMakeup, vUV - uOv);
+  vec4 m = texture(uMakeup, ovUV(vUV)); m.a *= uMkFade;
   if (m.a > .002){
     // blush / eyeshadow melt into the skin (soft-light); liner / brows darken
     vec3 base = clamp(res,0.,1.);
@@ -845,7 +847,7 @@ function computeWarps(){
 }
 
 // ---------------------------------------------------------------- render loop
-let flowOk=0, flowTry=0, lastLmsTs=0, lastDrawT=0, lastFps=30, slowCount=0, lastGood=null, missCount=0, shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
+let mkFade=1, prevOv=[0,0], flowOk=0, flowTry=0, lastLmsTs=0, lastDrawT=0, lastFps=30, slowCount=0, lastGood=null, missCount=0, shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
 function upload(t, el){ gl.bindTexture(gl.TEXTURE_2D,t); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,el); }
 function frame(now){
   requestAnimationFrame(frame);
@@ -891,17 +893,34 @@ function frameBody(now){
   const fresh = hasFace && lms !== shownLms; shownLms = lms;
   let ovx = 0, ovy = 0;
   if (hasFace){ if (fresh) updatePoints(lms, useWorker ? workerLmsTs : now); if (fresh || slidersDirty) drawMasks(); computeWarps(); } else prevPts = null;
-  let flowUsed = false;
+  let flowUsed = false, aff = null;
   if (S.flow > 0 && hasFace && isVideo && curGray && pts){
     const ref = grayAt(useWorker ? workerLmsTs : lastLmsTs);
     if (ref && ref !== curGray){
       const sx = curGray.w / W, sy = curGray.h / H;   // face box (eyes-nose-mouth) in grey pixels
       const a = P(234), b = P(454), t = P(10), c = P(152);
       const box = [ (a[0] + (b[0]-a[0])*0.15)*sx, (t[1] + (c[1]-t[1])*0.2)*sy, (a[0] + (b[0]-a[0])*0.85)*sx, (t[1] + (c[1]-t[1])*0.9)*sy ];
-      const sh = faceShift(ref, curGray, box);
-      if (sh){ ovx = sh[0] / curGray.w; ovy = sh[1] / curGray.h; flowUsed = true; flowOk++; } flowTry++;
+      const xm = (box[0]+box[2])/2, bL = [box[0],box[1],xm,box[3]], bR = [xm,box[1],box[2],box[3]];
+      const sL = faceShift(ref, curGray, bL), sR = faceShift(ref, curGray, bR), sh = (sL && sR) ? [(sL[0]+sR[0])/2, (sL[1]+sR[1])/2] : faceShift(ref, curGray, box);
+      if (sh){ ovx = sh[0] / curGray.w; ovy = sh[1] / curGray.h; flowUsed = true; flowOk++;
+        if (sL && sR){   // size + tilt from the two halves (similarity transform)
+          const kx = W/curGray.w, ky = H/curGray.h;
+          const cL = [((bL[0]+bL[2])/2)*kx, ((bL[1]+bL[3])/2)*ky], cR = [((bR[0]+bR[2])/2)*kx, ((bR[1]+bR[3])/2)*ky];
+          const cL2 = [cL[0]+sL[0]*kx, cL[1]+sL[1]*ky], cR2 = [cR[0]+sR[0]*kx, cR[1]+sR[1]*ky];
+          const v = [cR[0]-cL[0], cR[1]-cL[1]], v2 = [cR2[0]-cL2[0], cR2[1]-cL2[1]];
+          const sc = Math.hypot(v2[0],v2[1]) / Math.max(1, Math.hypot(v[0],v[1])), an = Math.atan2(v2[1],v2[0]) - Math.atan2(v[1],v[0]);
+          if (sc > 0.8 && sc < 1.25 && Math.abs(an) < 0.35) aff = { ref:[(cL[0]+cR[0])/2,(cL[1]+cR[1])/2], cur:[(cL2[0]+cR2[0])/2,(cL2[1]+cR2[1])/2], sc, an };
+        } }
+      flowTry++;
     } else if (ref === curGray) flowUsed = true;   // points are from this very frame: no shift needed
   }
+  if (S.flow > 0 && hasFace){
+    const fwp = Math.max(1, dist(P(234),P(454))), sp = Math.hypot((ovx - prevOv[0])*W, (ovy - prevOv[1])*H) / fwp;
+    let target = 1 - Math.min(1, Math.max(0, (sp - 0.025) / 0.05));      // fade when the face moves > ~2.5-7.5% of its width per frame
+    if (!flowUsed && useWorker) target = Math.min(target, 0.5);
+    mkFade += (target - mkFade) * (target < mkFade ? 0.6 : 0.25);          // fade out fast, back in gently
+    prevOv = [ovx, ovy];
+  } else mkFade = 1;
   if (!flowUsed && hasFace && (useWorker || !fresh) && isVideo && dxs){
     const dt = Math.min(useWorker ? 0.15 : 0.06, (now - lastPtsT)/1000), k = 13*2;          // lip centre velocity (px/s) x time since last detection (damped, no overshoot)
     const cl = useWorker ? 0.06 : 0.03, gk = useWorker ? 0.75 : 0.6;
@@ -920,7 +939,9 @@ function frameBody(now){
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D,tLip);
   const u1=P1.u;
   gl.uniform1i(u1.uSrc,0); gl.uniform1i(u1.uFace,1); gl.uniform1i(u1.uMakeup,2); gl.uniform1i(u1.uLips,3); gl.uniform1i(u1.uLut,4); gl.uniform1i(u1.uLut2,7); gl.uniform1f(u1.uLutSel, S.lutSel||0); gl.uniform1f(u1.uExpo, 1. - 0.5*(S.expo||0)); gl.uniform1f(u1.uCamSat, 1. + 0.4*(S.camSat||0));
-  gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_3D,tLut2); gl.uniform1i(u1.uFeat,5); gl.uniform1i(u1.uRings, S.lite > 0 ? 2 : 3); gl.uniform2f(u1.uOv, ovx, ovy); gl.uniform1i(u1.uSeg,6); gl.uniform1f(u1.uHasSeg, (hasSeg && S.skinAI > 0) ? 1 : 0);
+  gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_3D,tLut2); gl.uniform1i(u1.uFeat,5); gl.uniform1i(u1.uRings, S.lite > 0 ? 2 : 3); gl.uniform2f(u1.uOv, ovx, ovy); gl.uniform1f(u1.uMkFade, mkFade);
+  if (aff){ const c=Math.cos(aff.an), si=Math.sin(aff.an); gl.uniform1f(u1.uOvAff,1); gl.uniform2f(u1.uOvRef,aff.ref[0],aff.ref[1]); gl.uniform2f(u1.uOvCur,aff.cur[0],aff.cur[1]); gl.uniformMatrix2fv(u1.uOvMi,false,[c/aff.sc,-si/aff.sc,si/aff.sc,c/aff.sc]); }
+  else gl.uniform1f(u1.uOvAff,0); gl.uniform1i(u1.uSeg,6); gl.uniform1f(u1.uHasSeg, (hasSeg && S.skinAI > 0) ? 1 : 0);
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, tSeg); gl.uniform1f(u1.uDenoise,S.denoise); gl.uniform1f(u1.uHD,S.hd); gl.uniform1f(u1.uFaceRad, hasFace ? dist(P(234),P(454))*0.012 : 0); gl.uniform1f(u1.uSharp,S.sharp); gl.uniform1f(u1.uVibe,S.vibe);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, hasFace ? tFeat : tEmpty);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_3D,tLut);
@@ -936,7 +957,7 @@ function frameBody(now){
   const u2=P2.u;
   gl.uniform1i(u2.uImg,0); gl.uniform1i(u2.uOrig,1); gl.uniform2f(u2.uRes,W,H);
   gl.uniform1f(u2.uMirror,$('mirror').checked?1:0); gl.uniform1f(u2.uSplit,split); gl.uniform1f(u2.uHasFace,hasFace?1:0);
-  if (ovx || ovy){ const ox = ovx*W, oy = ovy*H, wa = new Float32Array(warpArr); for (let i=0;i<12;i++){ wa[i*4]+=ox; wa[i*4+1]+=oy; wa[i*4+2]+=ox; wa[i*4+3]+=oy; }
+  if (ovx || ovy){ const ox = ovx*W, oy = ovy*H, wa = new Float32Array(warpArr); for (let i=0;i<12;i++){ wa[i*4]+=ox; wa[i*4+1]+=oy; wa[i*4+2]+=ox; wa[i*4+3]+=oy; }   // (translation part; size/tilt handled for makeup)
     gl.uniform4fv(u2.uWarp, wa); }
   else gl.uniform4fv(u2.uWarp,warpArr); gl.uniform1fv(u2.uWarpR,warpR); gl.uniform1i(u2.uNW,hasFace?nWarp:0);
   gl.uniform4f(u2.uEyes,eyes[0]+ovx*W,eyes[1]+ovy*H,eyes[2]+ovx*W,eyes[3]+ovy*H); gl.uniform1f(u2.uEyeR,eyeR); gl.uniform1f(u2.uEyeS,hasFace?eyeS:0);
