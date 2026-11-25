@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v52</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v53</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -104,6 +104,7 @@ const PARAMS = [
   {g:'Beauty',  k:'even',     l:'Even skin tone', d:0},
   {g:'Beauty',  k:'soften',   l:'Soft focus (whole frame)', d:0},
   {g:'Beauty',  k:'vibe',     l:'Healthy warm skin', d:0},
+  {g:'Beauty',  k:'flow',     l:'Motion tracking (makeup follows instantly)', d:0},
   {g:'Beauty',  k:'worker',   l:'Background tracking (smooth video)', d:0},
   {g:'Look',    k:'expo',     l:'Camera brightness fix (Android)', d:0},
   {g:'Look',    k:'camSat',   l:'Camera color fix (Android)', d:0},
@@ -136,8 +137,8 @@ const PRESETS = {
   'Hot Days': {smooth:0.9,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:1,denoise:1,clarity:0.25,grade:1,match:1,glow:0.17,slim:0,vshape:0.13,eyes:0,nose:0.04,lips:0.23,lipColor:'#e88a9a',lipShade:0.61,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
   'Hot Days 2': {smooth:0.7,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0.17,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipDetail:1,noseTip:0.6,lipColor:'#b84e60',lipShade:0,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
   'Hot Days 3': {smooth:0.7,brighten:0.44,rosy:0.75,even:0.21,soften:0,vibe:1,trackEvery:1,skinAI:0,hd:1,sharp:1,denoise:1,clarity:0.1,grade:1,match:1,glow:0.17,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipColor:'#b84e60',lipShade:0,lipDetail:1,noseTip:0.35,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
-  'Hot Days Android': {worker:1,lutSel:0,expo:0.72,camSat:0.41,lite:1,scale:0.75,smooth:0.75,brighten:0.6,rosy:0.8,even:0,soften:0,vibe:1,trackEvery:0.5,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipColor:'#b84e60',lipShade:0,lipDetail:1,noseTip:0.35,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
-  'Off':      {expo:0,camSat:0,worker:0,lutSel:0,scale:0,lite:0,trackEvery:0,lipDetail:0,noseTip:0,lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
+  'Hot Days Android': {flow:1,worker:1,lutSel:0,expo:0.72,camSat:0.41,lite:1,scale:0.75,smooth:0.75,brighten:0.6,rosy:0.8,even:0,soften:0,vibe:1,trackEvery:0.5,skinAI:0,hd:1,sharp:0.6,denoise:1,clarity:0.1,grade:1,match:1,glow:0,slim:0,vshape:0,eyes:0.15,nose:0.04,lips:0.55,lipColor:'#b84e60',lipShade:0,lipDetail:1,noseTip:0.35,blush:1,blushColor:'#f3917f',shadow:0.05,shadowColor:'#d9967a',liner:0,linerColor:'#141414',brows:0,browColor:'#3b2a20'},
+  'Off':      {flow:0,expo:0,camSat:0,worker:0,lutSel:0,scale:0,lite:0,trackEvery:0,lipDetail:0,noseTip:0,lipShade:0,skinAI:0,hd:0,sharp:0,vibe:0,denoise:0,match:0,soften:0,even:0,grade:0,glow:0,smooth:0,brighten:0,rosy:0,clarity:0,slim:0,vshape:0,eyes:0,nose:0,lips:0,blush:0,shadow:0,liner:0,brows:0},
   'Natural':  {smooth:0.45,brighten:0.25,rosy:0.15,clarity:0.2,slim:0.2,vshape:0.1,eyes:0.15,nose:0.1,lips:0.2,blush:0.15,shadow:0,liner:0,brows:0.1, lipColor:'#c74b6b', blushColor:'#ff8a9a'},
   'Soft Glow':{smooth:0.65,brighten:0.45,rosy:0.3,clarity:0.25,slim:0.3,vshape:0.2,eyes:0.25,nose:0.2,lips:0.3,blush:0.3,shadow:0.15,liner:0,brows:0.15, lipColor:'#e0607e', blushColor:'#ff7fa0', shadowColor:'#c08a7a'},
   'Glam':     {smooth:0.7,brighten:0.4,rosy:0.2,clarity:0.35,slim:0.45,vshape:0.35,eyes:0.35,nose:0.3,lips:0.6,blush:0.3,shadow:0.45,liner:0.6,brows:0.35, lipColor:'#a3123a', blushColor:'#e86a7f', shadowColor:'#7a4a6e', linerColor:'#111111', browColor:'#2e2018'},
@@ -466,6 +467,33 @@ function tex(){ const t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,t);
 const tSrc=tex(), tFace=tex(), tMake=tex(), tMid=tex(), tEmpty=tex(), tLip=tex(), tFeat=tex();
 const fbo = gl.createFramebuffer();
 const tSeg = tex();
+// ---- fast motion tracker between face checks: tiny grey frames + block matching (~2-3 ms)
+const GW = 96; const grayCv = document.createElement('canvas'), grx = grayCv.getContext('2d', { willReadFrequently: true });
+let grayRing = [], curGray = null;
+function captureGray(ts){
+  const vw = src.videoWidth || src.width, vh = src.videoHeight || src.height; const gh = Math.round(GW*vh/vw);
+  if (grayCv.width !== GW || grayCv.height !== gh){ grayCv.width = GW; grayCv.height = gh; grayRing = []; }
+  grx.drawImage(src, 0, 0, GW, gh); const d = grx.getImageData(0, 0, GW, gh).data, g = new Uint8Array(GW*gh);
+  for (let i=0, j=0; j<g.length; i+=4, j++) g[j] = (d[i]*77 + d[i+1]*150 + d[i+2]*29) >> 8;
+  curGray = { ts, g, w: GW, h: gh }; grayRing.push(curGray); if (grayRing.length > 16) grayRing.shift();
+}
+function grayAt(ts){ let best = null, bd = 1e9; for (const f of grayRing){ const d = Math.abs(f.ts - ts); if (d < bd){ bd = d; best = f; } } return bd < 60 ? best : null; }
+// face shift (in grey pixels) between the frame the face points came from and the current frame
+function faceShift(ref, cur, box){
+  const w = cur.w, h = cur.h, R = 10;
+  const x0 = Math.max(R, Math.floor(box[0])), y0 = Math.max(R, Math.floor(box[1])), x1 = Math.min(w-R-1, Math.ceil(box[2])), y1 = Math.min(h-R-1, Math.ceil(box[3]));
+  if (x1 - x0 < 8 || y1 - y0 < 8) return null;
+  const A = ref.g, B = cur.g; let best = 1e18, bx = 0, by = 0; const sad = new Float64Array((2*R+1)*(2*R+1));
+  for (let dy=-R; dy<=R; dy++) for (let dx=-R; dx<=R; dx++){
+    let t = 0; for (let y=y0; y<y1; y+=2){ const ra = y*w, rb = (y+dy)*w + dx; for (let x=x0; x<x1; x+=2){ const v = A[ra+x] - B[rb+x]; t += v < 0 ? -v : v; } }
+    sad[(dy+R)*(2*R+1)+(dx+R)] = t; if (t < best){ best = t; bx = dx; by = dy; } }
+  const at = (dx,dy)=> sad[(dy+R)*(2*R+1)+(dx+R)];
+  let sx = bx, sy = by;   // sub-pixel refinement
+  if (bx>-R && bx<R){ const a=at(bx-1,by), c=at(bx+1,by), den=a-2*best+c; if (den>0) sx += 0.5*(a-c)/den; }
+  if (by>-R && by<R){ const a=at(bx,by-1), c=at(bx,by+1), den=a-2*best+c; if (den>0) sy += 0.5*(a-c)/den; }
+  const n = ((x1-x0)>>1)*((y1-y0)>>1); if (best/n > 22) return null;   // poor match (big change / occlusion): don't trust
+  return [sx, sy];
+}
 const detCv = document.createElement('canvas'), dtx = detCv.getContext('2d');
 const lumCv = document.createElement('canvas'); lumCv.width = lumCv.height = 8; const ltx = lumCv.getContext('2d', { willReadFrequently: true });
 let sceneLum = 128, lumFrame = 0;
@@ -791,7 +819,7 @@ function computeWarps(){
 }
 
 // ---------------------------------------------------------------- render loop
-let lastDrawT=0, lastFps=30, slowCount=0, lastGood=null, missCount=0, shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
+let lastLmsTs=0, lastDrawT=0, lastFps=30, slowCount=0, lastGood=null, missCount=0, shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
 function upload(t, el){ gl.bindTexture(gl.TEXTURE_2D,t); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,el); }
 function frame(now){
   requestAnimationFrame(frame);
@@ -807,6 +835,7 @@ function frameBody(now){
   newVF = false;
 
   let lms = null;
+  if (S.flow > 0 && isVideo) captureGray(now);
   if (S.worker > 0 && !workerTried) startWorker();
   if (worker && !workerReady && now - workerStartT > 45000) workerFail('slow start');
   if (worker && workerBusy && workerSentT && now - workerSentT > 6000) workerFail('no answer');
@@ -827,7 +856,7 @@ function frameBody(now){
       const dt0 = performance.now()-t0; detMs = detMs*0.9 + dt0*0.1;
       benchMain(dt0);
       if (!isVideo) cachedLms = lms || null;
-      lastLms = lms || null;
+      lastLms = lms || null; lastLmsTs = now;
       if ((!MOBILE || !isVideo) && frameNo % 3 === 0) runSegmentation(now);
     }
   }
@@ -838,7 +867,18 @@ function frameBody(now){
   const fresh = hasFace && lms !== shownLms; shownLms = lms;
   let ovx = 0, ovy = 0;
   if (hasFace){ if (fresh) updatePoints(lms, useWorker ? workerLmsTs : now); if (fresh || slidersDirty) drawMasks(); computeWarps(); } else prevPts = null;
-  if (hasFace && (useWorker || !fresh) && isVideo && dxs){
+  let flowUsed = false;
+  if (S.flow > 0 && hasFace && isVideo && curGray && pts){
+    const ref = grayAt(useWorker ? workerLmsTs : lastLmsTs);
+    if (ref && ref !== curGray){
+      const sx = curGray.w / W, sy = curGray.h / H;   // face box (eyes-nose-mouth) in grey pixels
+      const a = P(234), b = P(454), t = P(10), c = P(152);
+      const box = [ (a[0] + (b[0]-a[0])*0.15)*sx, (t[1] + (c[1]-t[1])*0.2)*sy, (a[0] + (b[0]-a[0])*0.85)*sx, (t[1] + (c[1]-t[1])*0.9)*sy ];
+      const sh = faceShift(ref, curGray, box);
+      if (sh){ ovx = sh[0] / curGray.w; ovy = sh[1] / curGray.h; flowUsed = true; }
+    } else if (ref === curGray) flowUsed = true;   // points are from this very frame: no shift needed
+  }
+  if (!flowUsed && hasFace && (useWorker || !fresh) && isVideo && dxs){
     const dt = Math.min(useWorker ? 0.15 : 0.06, (now - lastPtsT)/1000), k = 13*2;          // lip centre velocity (px/s) x time since last detection (damped, no overshoot)
     const cl = useWorker ? 0.06 : 0.03, gk = useWorker ? 0.75 : 0.6;
     ovx = Math.max(-cl, Math.min(cl, gk*dxs[k]*dt/W)); ovy = Math.max(-cl, Math.min(cl, gk*dxs[k+1]*dt/H));
