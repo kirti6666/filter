@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v53</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v54</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -480,7 +480,7 @@ function captureGray(ts){
 function grayAt(ts){ let best = null, bd = 1e9; for (const f of grayRing){ const d = Math.abs(f.ts - ts); if (d < bd){ bd = d; best = f; } } return bd < 60 ? best : null; }
 // face shift (in grey pixels) between the frame the face points came from and the current frame
 function faceShift(ref, cur, box){
-  const w = cur.w, h = cur.h, R = 10;
+  const w = cur.w, h = cur.h, R = 16;
   const x0 = Math.max(R, Math.floor(box[0])), y0 = Math.max(R, Math.floor(box[1])), x1 = Math.min(w-R-1, Math.ceil(box[2])), y1 = Math.min(h-R-1, Math.ceil(box[3]));
   if (x1 - x0 < 8 || y1 - y0 < 8) return null;
   const A = ref.g, B = cur.g; let best = 1e18, bx = 0, by = 0; const sad = new Float64Array((2*R+1)*(2*R+1));
@@ -491,7 +491,7 @@ function faceShift(ref, cur, box){
   let sx = bx, sy = by;   // sub-pixel refinement
   if (bx>-R && bx<R){ const a=at(bx-1,by), c=at(bx+1,by), den=a-2*best+c; if (den>0) sx += 0.5*(a-c)/den; }
   if (by>-R && by<R){ const a=at(bx,by-1), c=at(bx,by+1), den=a-2*best+c; if (den>0) sy += 0.5*(a-c)/den; }
-  const n = ((x1-x0)>>1)*((y1-y0)>>1); if (best/n > 22) return null;   // poor match (big change / occlusion): don't trust
+  const n = ((x1-x0)>>1)*((y1-y0)>>1); if (best/n > 38) return null;   // poor match (big change / occlusion): don't trust
   return [sx, sy];
 }
 const detCv = document.createElement('canvas'), dtx = detCv.getContext('2d');
@@ -707,10 +707,11 @@ function updatePoints(lms, now){
   if (prevPts && prevPts.length===raw.length && isVideo){
     const dt = Math.max(1/120, Math.min(0.25, (now - lastPtsT)/1000));
     if (!dxs || dxs.length !== raw.length) dxs = new Float32Array(raw.length);
+    const minCut = S.flow > 0 ? 7 : OE.minCut, beta = S.flow > 0 ? 0.12 : OE.beta;   // motion tracking keeps it steady, so filter lightly
     const ad = oeAlpha(OE.dCut, dt);
     for (let i=0;i<raw.length;i++){
       dxs[i] += ad*((raw[i]-prevPts[i])/dt - dxs[i]);
-      const a = oeAlpha(OE.minCut + OE.beta*Math.abs(dxs[i]), dt);
+      const a = oeAlpha(minCut + beta*Math.abs(dxs[i]), dt);
       pts[i] = prevPts[i] + a*(raw[i]-prevPts[i]);
     }
   } else { pts.set(raw); dxs = null; }
@@ -912,8 +913,10 @@ function frameBody(now){
   const u2=P2.u;
   gl.uniform1i(u2.uImg,0); gl.uniform1i(u2.uOrig,1); gl.uniform2f(u2.uRes,W,H);
   gl.uniform1f(u2.uMirror,$('mirror').checked?1:0); gl.uniform1f(u2.uSplit,split); gl.uniform1f(u2.uHasFace,hasFace?1:0);
-  gl.uniform4fv(u2.uWarp,warpArr); gl.uniform1fv(u2.uWarpR,warpR); gl.uniform1i(u2.uNW,hasFace?nWarp:0);
-  gl.uniform4f(u2.uEyes,eyes[0],eyes[1],eyes[2],eyes[3]); gl.uniform1f(u2.uEyeR,eyeR); gl.uniform1f(u2.uEyeS,hasFace?eyeS:0);
+  if (ovx || ovy){ const ox = ovx*W, oy = ovy*H, wa = new Float32Array(warpArr); for (let i=0;i<12;i++){ wa[i*4]+=ox; wa[i*4+1]+=oy; wa[i*4+2]+=ox; wa[i*4+3]+=oy; }
+    gl.uniform4fv(u2.uWarp, wa); }
+  else gl.uniform4fv(u2.uWarp,warpArr); gl.uniform1fv(u2.uWarpR,warpR); gl.uniform1i(u2.uNW,hasFace?nWarp:0);
+  gl.uniform4f(u2.uEyes,eyes[0]+ovx*W,eyes[1]+ovy*H,eyes[2]+ovx*W,eyes[3]+ovy*H); gl.uniform1f(u2.uEyeR,eyeR); gl.uniform1f(u2.uEyeS,hasFace?eyeS:0);
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 
   lastDrawT = now;
