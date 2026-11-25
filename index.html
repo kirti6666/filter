@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v54</span></h1><span id="status">Loading face model…</span></header>
+<header><span class="dot"></span><h1>Filter Lab <span style="font-weight:400;color:#8b91a1;font-size:12px">v55</span></h1><span id="status">Loading face model…</span></header>
 <main>
   <section class="stage">
     <div class="view" id="view">
@@ -180,12 +180,13 @@ Object.assign(S, PRESETS.Off, PRESETS['Hot Days']); syncUI(); presetBox.children
 $('copy').onclick = async ()=>{ try{ await navigator.clipboard.writeText($('json').value); $('copied').textContent='Copied'; }catch{ $('json').select(); $('copied').textContent='Press Ctrl+C'; } };
 
 // ---------------------------------------------------------------- background face tracker (worker)
-let worker = null, workerReady = false, workerBusy = false, workerLms = null, workerLmsTs = 0, workerMode = '';
-let workerTried = false, workerFailed = false, workerStartT = 0, workerSentT = 0, workerOkSince = 0;
-function workerFail(why){ if (workerFailed) return; workerFailed = true; workerReady = false; try{ worker && worker.terminate(); }catch(e){} worker = null; console.warn('background tracker off:', why); statusEl.textContent = 'Normal tracking (' + why + ')'; ensureMainLandmarker(); }
-function startWorker(){
-  if (worker || workerTried || workerFailed || !window.Worker || typeof MPV === 'undefined') return;
-  workerTried = true; workerStartT = performance.now();
+let pool = [], workerLms = null, workerLmsTs = 0, workerMode = '', workerTried = false, workerFailed = false, workerOkSince = 0, lastSendT = 0, workerBusy = false;
+let worker = null, workerReady = false;   // kept for compatibility: worker = pool active, workerReady = at least one ready
+function workerFail(why){ if (workerFailed) return; workerFailed = true; for (const p of pool){ try{ p.w.terminate(); }catch(e){} } pool = []; worker = null; workerReady = false;
+  console.warn('background tracker off:', why); statusEl.textContent = 'Normal tracking (' + why + ')'; ensureMainLandmarker(); }
+let bundleCode = null;
+function poolTarget(){ return (navigator.hardwareConcurrency || 4) >= 6 ? 2 : 1; }
+function spawnTracker(){
   const code = `
     const V='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
     const MODEL='https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
@@ -214,17 +215,41 @@ function startWorker(){
           if (a >= prevAvg){ try { lm.close(); } catch(_){} lm = prev.lm; mode = prev.mode; } else { try { prev.lm.close(); } catch(_){} } prev = null; }
       }
     };`;
-  worker = new Worker(URL.createObjectURL(new Blob([code], { type:'text/javascript' })));
-  worker.onmessage = (e)=>{ const d = e.data;
-    if (d.type === 'ready'){ workerReady = true; workerMode = d.mode; statusEl.textContent = 'Background tracker ready (' + d.mode + ')'; }
-    else if (d.type === 'result'){ workerBusy = false; if (!workerOkSince) workerOkSince = performance.now(); workerLms = d.lms; workerLmsTs = d.ts; detMs = detMs*0.8 + d.ms*0.2; workerMode = d.mode; }
-    else if (d.type === 'err'){ workerBusy = false; console.warn('tracker', d.msg); }
+  const p = { w: new Worker(URL.createObjectURL(new Blob([code], { type:'text/javascript' }))), ready:false, busy:false, sentT:0, startT: performance.now(), mode:'' };
+  p.w.onmessage = (e)=>{ const d = e.data;
+    if (d.type === 'ready'){ p.ready = true; p.mode = d.mode; workerReady = true; workerMode = d.mode;
+      statusEl.textContent = 'Background trackers: ' + pool.filter(x=>x.ready).length + ' (' + d.mode + ')';
+      if (pool.length < poolTarget() && !workerFailed) spawnTracker(); }                       // start the next one after this is ready
+    else if (d.type === 'result'){ p.busy = false; if (!workerOkSince) workerOkSince = performance.now();
+      if (d.ts > workerLmsTs){ workerLms = d.lms; workerLmsTs = d.ts; }                          // newest frame wins
+      detMs = detMs*0.8 + d.ms*0.2; p.mode = d.mode; workerMode = d.mode; }
+    else if (d.type === 'err'){ p.busy = false; console.warn('tracker', d.msg); }
   };
-  worker.onerror = (e)=>{ try{ e.preventDefault(); }catch(_){} workerFail(e.message || 'error'); };
-  // fetch the tracker code here and give it to the worker as a proper script
+  p.w.onerror = (e)=>{ try{ e.preventDefault(); }catch(_){} killTracker(p, e.message || 'error'); };
+  pool.push(p); worker = pool;
+  p.w.postMessage({ type:'init', code: bundleCode });
+}
+function killTracker(p, why){ try{ p.w.terminate(); }catch(e){} pool = pool.filter(x => x !== p); workerReady = pool.some(x=>x.ready); worker = pool.length ? pool : null; if (!pool.length) workerFail(why); }
+function startWorker(){
+  if (workerTried || workerFailed || !window.Worker || typeof MPV === 'undefined') return;
+  workerTried = true;
   fetch(MPV + '/vision_bundle.cjs').then(r => { if (!r.ok) throw new Error('bundle HTTP ' + r.status); return r.text(); })
-    .then(txt => { if (worker) worker.postMessage({ type:'init', code: txt }); })
+    .then(txt => { bundleCode = txt; spawnTracker(); })
     .catch(e => workerFail('download: ' + (e.message || e)));
+}
+function poolWatch(now){
+  for (const p of pool.slice()){
+    if (!p.ready && now - p.startT > 45000) killTracker(p, 'slow start');
+    else if (p.busy && p.sentT && now - p.sentT > 6000) killTracker(p, 'no answer');
+  }
+}
+function poolSend(now){
+  const ready = pool.filter(p => p.ready), idle = ready.find(p => !p.busy);
+  if (!idle) return;
+  const gap = Math.max(0, detMs / ready.length * 0.85);          // spread the trackers evenly over time
+  if (now - lastSendT < gap) return;
+  idle.busy = true; idle.sentT = now; lastSendT = now; const capTs = now;
+  createImageBitmap(detInput()).then(bm => idle.w.postMessage({ type:'frame', bm, ts: capTs }, [bm])).catch(()=>{ idle.busy = false; });
 }
 // ---------------------------------------------------------------- face model
 const statusEl = $('status');
@@ -820,7 +845,7 @@ function computeWarps(){
 }
 
 // ---------------------------------------------------------------- render loop
-let lastLmsTs=0, lastDrawT=0, lastFps=30, slowCount=0, lastGood=null, missCount=0, shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
+let flowOk=0, flowTry=0, lastLmsTs=0, lastDrawT=0, lastFps=30, slowCount=0, lastGood=null, missCount=0, shownLms=null, frameNo=0, lastLms=null, lastTs=0, frames=0, fpsT=performance.now(), detMs=0;
 function upload(t, el){ gl.bindTexture(gl.TEXTURE_2D,t); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,el); }
 function frame(now){
   requestAnimationFrame(frame);
@@ -838,14 +863,12 @@ function frameBody(now){
   let lms = null;
   if (S.flow > 0 && isVideo) captureGray(now);
   if (S.worker > 0 && !workerTried) startWorker();
-  if (worker && !workerReady && now - workerStartT > 45000) workerFail('slow start');
-  if (worker && workerBusy && workerSentT && now - workerSentT > 6000) workerFail('no answer');
-  const useWorker = S.worker > 0 && isVideo && workerReady && !!worker;
+  poolWatch(now);
+  const useWorker = S.worker > 0 && isVideo && pool.some(p => p.ready);
   if (!useWorker && !landmarker) ensureMainLandmarker();
   if (useWorker && landmarker && workerOkSince && now - workerOkSince > 4000){ try{ landmarker.close(); }catch(e){} landmarker = null; }   // free memory: background tracker is working
   if (useWorker){
-    if (!workerBusy){ workerBusy = true; workerSentT = now; const capTs = now;
-      createImageBitmap(detInput()).then(bm => worker.postMessage({ type:'frame', bm, ts: capTs }, [bm])).catch(()=>{ workerBusy = false; }); }
+    poolSend(now);
     lms = workerLms;
   } else if (landmarker){
     frameNo++;
@@ -876,7 +899,7 @@ function frameBody(now){
       const a = P(234), b = P(454), t = P(10), c = P(152);
       const box = [ (a[0] + (b[0]-a[0])*0.15)*sx, (t[1] + (c[1]-t[1])*0.2)*sy, (a[0] + (b[0]-a[0])*0.85)*sx, (t[1] + (c[1]-t[1])*0.9)*sy ];
       const sh = faceShift(ref, curGray, box);
-      if (sh){ ovx = sh[0] / curGray.w; ovy = sh[1] / curGray.h; flowUsed = true; }
+      if (sh){ ovx = sh[0] / curGray.w; ovy = sh[1] / curGray.h; flowUsed = true; flowOk++; } flowTry++;
     } else if (ref === curGray) flowUsed = true;   // points are from this very frame: no shift needed
   }
   if (!flowUsed && hasFace && (useWorker || !fresh) && isVideo && dxs){
@@ -928,7 +951,7 @@ function frameBody(now){
   if (isVideo && now - fpsT > 500 && frames*1000/(now-fpsT) < 17){ slowCount = (slowCount||0) + 1;
     if (slowCount >= 4 && procScale > 0.7){ procScale = Math.max(0.67, procScale - 0.17); slowCount = 0; setSource(src, true); } }
   else if (now - fpsT > 500) slowCount = 0;
-  if (now - fpsT > 500){ lastFps = frames*1000/(now-fpsT); $('fps').textContent = `${(frames*1000/(now-fpsT)).toFixed(0)} fps · face ${hasFace?'✓':'—'} · detect ${detMs.toFixed(1)} ms${useWorker?' (bg '+workerMode+')':' ('+bench.mode+')'} · ${W}×${H}`; frames=0; fpsT=now; }
+  if (now - fpsT > 500){ lastFps = frames*1000/(now-fpsT); $('fps').textContent = `${(frames*1000/(now-fpsT)).toFixed(0)} fps · face ${hasFace?'✓':'—'} · detect ${detMs.toFixed(1)} ms${useWorker?' (bg '+workerMode+' ×'+pool.filter(p=>p.ready).length+')':' ('+bench.mode+')'}${S.flow>0&&flowTry?' · motion ✓'+Math.round(100*flowOk/flowTry)+'%':''} · ${W}×${H}`; frames=0; fpsT=now; flowOk=0; flowTry=0; }
 }
 
 // landmark overlay (debug)
